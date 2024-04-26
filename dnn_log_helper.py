@@ -12,18 +12,12 @@ import configs
 __LOGGING_ACTIVE = False
 
 
-def start_setup_log_file(framework_name: str, torch_version: str, timm_version: str, gpu: str, args_conf: list,
-                         dnn_name: str, activate_logging: bool, dnn_goal: str, float_threshold: float,
-                         dataset: str) -> None:
+def start_setup_log_file(framework_name: str, dnn_name: str, activate_logging: bool, **kwargs) -> None:
     global __LOGGING_ACTIVE
     __LOGGING_ACTIVE = activate_logging
-    dnn_log_header = f"framework:{framework_name} torch_version:{torch_version} timm_version:{timm_version} GPU:{gpu} "
-    dnn_log_header += f"goal:{dnn_goal} topk:{configs.CLASSIFICATION_CRITICAL_TOP_K} float_threshold:{float_threshold} "
-    dnn_log_header += f"dataset:{dataset} "
-    dnn_log_header += " ".join(args_conf)
     if __LOGGING_ACTIVE:
         bench_name = f"{framework_name}-{dnn_name}"
-        log_helper.start_log_file(bench_name, dnn_log_header)
+        log_helper.start_log_file(bench_name, " ".join({f"{k}:{v}" for k, v in kwargs.items()}))
         log_helper.set_max_errors_iter(configs.MAXIMUM_ERRORS_PER_ITERATION)
         log_helper.set_max_infos_iter(configs.MAXIMUM_INFOS_PER_ITERATION)
         interval_print = configs.ITERATION_INTERVAL_LOG_HELPER_PRINT[dnn_name]

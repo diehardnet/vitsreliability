@@ -1,5 +1,3 @@
-RANDOM_INT_LIMIT = 65535
-
 MAXIMUM_ERRORS_PER_ITERATION = 512
 MAXIMUM_INFOS_PER_ITERATION = 512
 
@@ -9,7 +7,8 @@ MINIMUM_DEVICE_CAPABILITY_TORCH_COMPILE = 7  # Volta
 
 CLASSIFICATION_CRITICAL_TOP_K = 1
 # FORCE the gpu to be present
-DEVICE = "cuda:0"
+GPU_DEVICE = "cuda:0"
+CPU = "cpu"
 
 # Classification CNNs
 RESNET50D_IMAGENET_TIMM = "resnet50d"
@@ -135,16 +134,19 @@ CLASSES = {
     IMAGENET: 1000
 }
 
-IMAGENET_DATASET_DIR = "/home/carol/ILSVRC2012"
-COCO_DATASET_DIR = "/home/carol/coco"
+IMAGENET_DATASET_DIR = "/home/ILSVRC2012"
+COCO_DATASET_DIR = "/home/COCO"
 COCO_DATASET_VAL = f"{COCO_DATASET_DIR}/val2017"
 COCO_DATASET_ANNOTATIONS = f"{COCO_DATASET_DIR}/annotations/instances_val2017.json"
 
 # File to save last status of the benchmark when log helper not active
-TMP_CRASH_FILE = "/tmp/maximal_crash_file.txt"
+TMP_CRASH_FILE = "/tmp/vitsreliability_crash_file.txt"
 
 # TensorRT file pattern
 TENSORRT_FILE_POSFIX = "_tensorrt.ts"
 
 # Seed used for sampling
 SAMPLER_SEED = 2147483647
+
+# code types that can be evaluated
+GROUDING_DINO, MAXIMALS, SELECTIVE_ECC = range(3)
