@@ -1,6 +1,5 @@
-import argparse
 import time
-from typing import Union, Tuple, List
+from typing import Union, Tuple
 
 import torch
 import dnn_log_helper
@@ -61,40 +60,3 @@ def check_and_setup_gpu() -> None:
         dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
 
 
-def parse_args() -> Tuple[argparse.Namespace, List[str]]:
-    """ Parse the args and return an args namespace and the tostring from the args    """
-    parser = argparse.ArgumentParser(description='PyTorch Maximals radiation setup', add_help=True)
-    # parser = argparse.ArgumentParser(description='PyTorch DNN radiation setup')
-    parser.add_argument('--iterations', default=int(1e12), help="Iterations to run forever", type=int)
-    parser.add_argument('--testsamples', default=128, help="Test samples to be used in the test.", type=int)
-    parser.add_argument('--generate', default=False, action="store_true", help="Set this flag to generate the gold")
-    parser.add_argument('--disableconsolelog', default=False, action="store_true",
-                        help="Set this flag disable console logging")
-    parser.add_argument('--goldpath', help="Path to the gold file")
-    parser.add_argument('--checkpointdir', help="Path to checkpoint dir")
-    parser.add_argument('--model', help="Model name: " + ", ".join(configs.ALL_POSSIBLE_MODELS),
-                        type=str, default=configs.RESNET50D_IMAGENET_TIMM)
-    parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
-    # Only for pytorch 2.0
-    parser.add_argument('--usetorchcompile', default=False, action="store_true",
-                        help="Disable or enable torch compile (GPU Arch >= 700)")
-    parser.add_argument('--hardenedid', default=False, action="store_true",
-                        help="Disable or enable HardenedIdentity. Work only for the profiled models.")
-    args = parser.parse_args()
-
-    if args.testsamples % args.batchsize != 0:
-        dnn_log_helper.log_and_crash(fatal_string="Test samples should be multiple of batch size")
-
-    # Check if it is only to generate the gold values
-    if args.generate is True:
-        args.iterations = 1
-
-    if args.usetorchcompile is True:
-        dnn_log_helper.log_and_crash(fatal_string="Torch compile is not savable yet.")
-
-    # Only valid models
-    if args.model not in configs.ALL_POSSIBLE_MODELS:
-        dnn_log_helper.log_and_crash(fatal_string=f"model == {args.model} is invalid")
-
-    args_text_list = [f"{k}={v}" for k, v in vars(args).items()]
-    return args, args_text_list

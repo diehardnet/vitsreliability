@@ -1,17 +1,23 @@
-#!/usr/bin/python3
 import argparse
 import logging
 import os
-from typing import Tuple, List, Dict, Union
+import random
+from typing import Tuple, List, Union
 
 import torch
-from torchvision import datasets as tv_datasets
-from torchvision import transforms as tv_transforms
 
-from GroundingDINO.groundingdino.util.inference import load_model as gdino_load_model
-from GroundingDINO.groundingdino.util.inference import load_image as gdino_load_image
-from GroundingDINO.groundingdino.util.inference import predict as gdino_predict
-from GroundingDINO.groundingdino.util.inference import annotate as gdino_annotate
+from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
+from GroundingDINO.groundingdino.models import build_model as gdino_build_model
+from GroundingDINO.groundingdino.util.utils import clean_state_dict as gdino_clean_state_dict
+import GroundingDINO.groundingdino.datasets.transforms as gdino_transforms
+from GroundingDINO.groundingdino.util.misc import collate_fn as gdino_collate_fn
+from GroundingDINO.groundingdino.util import get_tokenlizer as gdino_get_tokenlizer
+
+from GroundingDINO.demo.test_ap_on_coco import CocoDetection as GDINOCocoDetection
+from GroundingDINO.demo.test_ap_on_coco import PostProcessCocoGrounding as GDINOPostProcessCocoGrounding
+from GroundingDINO.groundingdino.datasets.cocogrounding_eval import (
+    CocoGroundingEvaluator as GDINOCocoGroundingEvaluator
+)
 
 import configs
 import console_logger
@@ -19,88 +25,68 @@ import dnn_log_helper
 import common
 
 
-# def replace_identity(module: torch.nn.Module, model_name: str):
-#     """Recursively put desired module in nn.module module.
-#     """
-#     # go through all attributes of module nn.module (e.g., network or layer) and put batch norms if present
-#     for attr_str in dir(module):
-#         target_attr = getattr(module, attr_str)
-#         if type(target_attr) == torch.nn.Identity:
-#             new_identity = hardened_identity.HardenedIdentity(model_name=model_name)
-#             setattr(module, attr_str, new_identity)
-#
-#     # Iterate through immediate child modules. Note, our code does the recursion no need to use named_modules()
-#     for _, immediate_child_module in module.named_children():
-#         replace_identity(module=immediate_child_module, model_name=model_name)
-
-
-def load_model(model_name: str, model_weights_path: str, hardened_model: bool, torch_compile: bool) -> torch.nn.Module:
+def load_model(model_checkpoint_path: str, model_config_path: str, hardened_model: bool,
+               torch_compile: bool) -> [any, torch.nn.Module]:
     # The First option is the baseline option
-    model = gdino_load_model(model_name, model_weights_path)
+    cfg_args = gdino_SLConfig.fromfile(model_config_path)
+    cfg_args.device = configs.GPU_DEVICE
+    model = gdino_build_model(cfg_args)
+    checkpoint = torch.load(model_checkpoint_path, map_location=configs.GPU_DEVICE)
+    model.load_state_dict(gdino_clean_state_dict(checkpoint["model"]), strict=False)
     model.eval()
-    if hardened_model:
-        raise NotImplementedError("Hardened Id not ready")
     # Disable also parameter grads
     model.zero_grad(set_to_none=True)
     model = model.to(configs.GPU_DEVICE)
+
+    if hardened_model:
+        raise NotImplementedError("Hardened Id not ready")
 
     # TODO: Implement when the serialization is possible
     if torch_compile is True:
         # model = torch.compile(model=model, mode="max-autotune")
         dnn_log_helper.log_and_crash(fatal_string="Up to now it's not possible to serialize compiled models "
                                                   "(github.com/pytorch/pytorch/issues/101107#issuecomment-1542688089)")
-    return model
+    return cfg_args.text_encoder_type, model
 
 
-def load_data_at_test(gold_path: str) -> Tuple:
-    # gold_model_path = gold_path.replace(".pt", "_traced_model.pt")
-    # The order -> golden, input_list, input_labels, model, original_dataset_order
-    [golden, input_list, input_labels, model, original_dataset_order] = torch.load(gold_path)
-    # model = torch.jit.load(gold_model_path)
-    model.zero_grad(set_to_none=True)
-    return golden, input_labels, input_list, model, original_dataset_order
+def load_dataset(batch_size: int, test_sample: int, text_encoder_type) -> Tuple[List, List, List]:
+    # build dataloader
+    transform = gdino_transforms.Compose(
+        [
+            gdino_transforms.RandomResize([800], max_size=1333),
+            gdino_transforms.ToTensor(),
+            gdino_transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ]
+    )
+    dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
+    test_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1,
+                                              collate_fn=gdino_collate_fn)
 
+    # build post processor
+    tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
+    postprocessor = GDINOPostProcessCocoGrounding(coco_api=dataset.coco, tokenlizer=tokenlizer)
 
-def save_data_at_test(model: torch.nn.Module,
-                      golden: torch.tensor,
-                      input_list: List[torch.tensor],
-                      input_labels: List,
-                      original_dataset_order: List,
-                      gold_path: str) -> None:
-    # gold_model_path = gold_path.replace(".pt", "_traced_model.pt")
-    output_file = [golden, input_list, input_labels, model, original_dataset_order]
-    torch.save(output_file, gold_path)
-    # torch.jit.save(model, gold_model_path)
+    # build evaluator
+    evaluator = GDINOCocoGroundingEvaluator(dataset.coco, iou_types=("bbox",), useCats=True)
 
+    # build captions
+    category_dict = dataset.coco.dataset['categories']
+    cat_list = [item['name'] for item in category_dict]
+    caption = " . ".join(cat_list) + ' .'
+    # TODO: try a different prompt
+    print("Input text prompt:", caption)
+    # For each image in the batch I'm searching for the COCO classes
+    input_captions = [caption] * batch_size
 
-def load_dataset(batch_size: int, dataset: str, test_sample: int,
-                 transform: tv_transforms.Compose) -> Tuple[List, List, List]:
-    # Using sequential sampler is the same as passing the shuffle=False
-    # Using the RandomSampler with a fixed seed is better
-    input_dataset, input_labels, original_order = list(), list(), list()
-    sampler_generator = torch.Generator(device="cpu")
-    sampler_generator.manual_seed(configs.SAMPLER_SEED)
-    # This is only used when performing det/seg and these models already perform transforms
-    test_set = tv_datasets.coco.CocoDetection(root=configs.COCO_DATASET_VAL,
-                                              annFile=configs.COCO_DATASET_ANNOTATIONS,
-                                              transform=transform)
-
-    subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=test_sample,
-                                            generator=sampler_generator)
-    test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=batch_size,
-                                              shuffle=False, pin_memory=True)
-    for inputs, labels in test_loader:
+    input_dataset, input_labels = list(), list()
+    for i, (inputs, labels) in enumerate(test_loader):
         # Only the inputs must be in the device
         input_dataset.append(inputs.to(configs.GPU_DEVICE))
         input_labels.append(labels)
+        if i == test_sample:
+            break
 
-    return input_dataset, input_labels, original_order
-
-
-# def get_top_k_labels(input_tensor: torch.tensor, top_k: int) -> torch.tensor:
-#     # Apply softmax to get predicted probabilities for each class
-#     probabilities = torch.nn.functional.softmax(input_tensor, dim=0)
-#     return torch.topk(probabilities, k=top_k).indices.squeeze(0)
+    return input_dataset, input_labels, input_captions
 
 
 def compare_detection(output_tensor: torch.tensor,
@@ -165,46 +151,6 @@ def compare_detection(output_tensor: torch.tensor,
     return output_errors
 
 
-# def check_dnn_accuracy(predicted: Union[Dict[str, List[torch.tensor]], torch.tensor], ground_truth: List[torch.tensor],
-#                        output_logger: logging.Logger, dnn_goal: str) -> None:
-#     correct, gt_count = 0, 0
-#     if dnn_goal == configs.CLASSIFICATION:
-#         predicted = predicted["top_k_labels"]
-#         for pred, gt in zip(predicted, ground_truth):
-#             gt_count += gt.shape[0]
-#             correct += torch.sum(torch.eq(pred, gt))
-#     elif dnn_goal == configs.SEGMENTATION:
-#         dnn_log_helper.log_and_crash(fatal_string="Checking segmentation is not implemented")
-#
-#     if output_logger:
-#         correctness = correct / gt_count
-#         output_logger.debug(f"Correct predicted samples:{correct} - ({correctness * 100:.2f}%)")
-#         correctness_threshold = 0.7
-#         if correctness < correctness_threshold:
-#             dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY LOWER THAN {correctness_threshold * 100.0}%")
-#
-#
-# def update_golden(golden: Dict[str, list], output: torch.tensor, dnn_goal: str) -> Dict[str, list]:
-#     if dnn_goal == configs.CLASSIFICATION:
-#         golden["output_list"].append(output)
-#         golden["top_k_labels"].append(torch.tensor(
-#             [get_top_k_labels(input_tensor=output_batch, top_k=configs.CLASSIFICATION_CRITICAL_TOP_K) for output_batch
-#              in output]
-#         ))
-#     elif dnn_goal == configs.SEGMENTATION:
-#         golden["output_list"].append(output)
-#
-#     return golden
-
-
-# def copy_output_to_cpu(dnn_output: Union[torch.tensor, collections.OrderedDict],
-#                        dnn_goal: str) -> torch.tensor:
-#     if dnn_goal == configs.CLASSIFICATION:
-#         return dnn_output.to("cpu")
-#     elif dnn_goal == configs.SEGMENTATION:
-#         return dnn_output["out"].to('cpu')
-
-
 def print_setup_iteration(batch_id: Union[int, None], comparison_time: float, copy_to_cpu_time: float, errors: int,
                           kernel_time: float, setup_iteration: int, terminal_logger: logging.Logger) -> None:
     if terminal_logger:
@@ -225,8 +171,7 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
     float_threshold = configs.DNN_THRESHOLD[dnn_goal]
     log_args = dict(
         framework_name="PyTorch", torch_version=torch.__version__,
-        gpu=torch.cuda.get_device_name(), timm_version=timm.__version__,
-        args_conf=args_text_list, dnn_name=args.model,
+        gpu=torch.cuda.get_device_name(), args_conf=args_text_list, dnn_name=args.model,
         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
         float_threshold=float_threshold
     )
@@ -246,21 +191,18 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
     # This will save time
     if args.generate is False:
         # Save everything in the same list
-        golden, input_labels, input_list, model, original_dataset_order = load_data_at_test(gold_path=args.goldpath)
+        [golden, input_list, input_labels, model, input_captions] = torch.load(args.goldpath)
     else:
         # The First step is to load the inputs in the memory
         # Load the model
-        model = load_model(model_name=args.model, hardened_model=args.hardenedid,
-                                      torch_compile=args.usetorchcompile)
-        input_list, input_labels, original_dataset_order = load_dataset(batch_size=args.batchsize, dataset=dataset,
-                                                                        test_sample=args.testsamples,
-                                                                        transform=transform)
-        golden: Dict[str, List[torch.tensor]] = dict(output_list=list(), top_k_labels=list())
-        # # Tracing the model with example input
-        # model = torch.jit.trace(model, input_list[0])
-        # # Invoking torch.jit.freeze
-        # model = torch.jit.freeze(model)
-        # model = torch.jit.script(model)
+        text_encoder_type, model = load_model(
+            model_checkpoint_path=args.checkpointpath, model_config_path=args.configpath,
+            hardened_model=args.hardenedid, torch_compile=args.usetorchcompile
+        )
+        input_list, input_labels, input_captions = load_dataset(
+            batch_size=args.batchsize, test_sample=args.testsamples, text_encoder_type=text_encoder_type
+        )
+        golden = dict()
 
     timer.toc()
     golden_load_diff_time = timer.diff_time_str
@@ -277,32 +219,24 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
         while batch_id < len(input_list):
             timer.tic()
             dnn_log_helper.start_iteration()
-            dnn_output = model(input_list[batch_id])
+            dnn_output = model(input_list[batch_id], captions=input_captions)
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
             dnn_log_helper.end_iteration()
             timer.toc()
             kernel_time = timer.diff_time
             # Always copy to CPU
             timer.tic()
-            dnn_output_cpu = dnn_output.to(configs.CPU)
+            for key, value in dnn_output.items():
+                value.to(configs.CPU)
             timer.toc()
             copy_to_cpu_time = timer.diff_time
             # Then compare the golden with the output
             timer.tic()
             errors = 0
             if args.generate is False:
-                # errors = compare_detection(output_tensor=dnn_output_cpu,
-                #                            golden=golden,
-                #                            ground_truth_labels=input_labels,
-                #                            batch_id=batch_id,
-                #                            output_logger=terminal_logger, dnn_goal=dnn_goal,
-                #                            setup_iteration=setup_iteration,
-                #                            float_threshold=float_threshold,
-                #                            original_dataset_order=original_dataset_order)
                 pass
             else:
                 pass
-                # golden = update_golden(golden=golden, output=dnn_output_cpu, dnn_goal=dnn_goal)
 
             timer.toc()
             comparison_time = timer.diff_time
@@ -316,8 +250,8 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
                 # Free cuda memory
                 torch.cuda.empty_cache()
                 # Everything in the same list
-                golden, input_labels, input_list, model, original_dataset_order = load_data_at_test(
-                    gold_path=args.goldpath)
+                [golden, input_list, input_labels, model, input_captions] = torch.load(
+                    args.goldpath)
 
             # Printing timing information
             print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
@@ -327,8 +261,10 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
         setup_iteration += 1
 
     if args.generate is True:
-        save_data_at_test(model=model, golden=golden, input_list=input_list, input_labels=input_labels,
-                          original_dataset_order=original_dataset_order, gold_path=args.goldpath)
+        torch.save(
+            obj=[golden, input_list, input_labels, model, input_captions],
+            f=args.goldpath
+        )
         # check_dnn_accuracy(predicted=golden, ground_truth=input_labels, output_logger=terminal_logger,
         #                    dnn_goal=dnn_goal)
 

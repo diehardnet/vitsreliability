@@ -7,8 +7,8 @@ GROUNDING_DINO_PATH = "/home/carol/vitsreliability/GroundingDINO"
 
 model = load_model(f"{GROUNDING_DINO_PATH}/groundingdino/config/GroundingDINO_SwinT_OGC.py",
                    f"{GROUNDING_DINO_PATH}/weights/groundingdino_swint_ogc.pth").to("cuda:0")
-IMAGE_PATH = f"/home/COCO/val2017/000000012670.jpg"
-TEXT_PROMPT = "all boys wearing red tshirt . "
+IMAGE_PATH = f"/tmp/ingenuinity.jpg"
+TEXT_PROMPT = " drone . "
 BOX_TRESHOLD = 0.35
 TEXT_TRESHOLD = 0.25
 

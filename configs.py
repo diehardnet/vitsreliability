@@ -90,12 +90,18 @@ VIT_CLASSIFICATION_CONFIGS = [
     # EFFICIENTFORMER_L7         --> Hardening not ready
 ]
 
-ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS
+GROUNDING_DINO_SWINT_OGC = "groundingdino_swint_ogc"
+VITS_MULTIMODAL_CONFIGS = [
+    GROUNDING_DINO_SWINT_OGC
+]
+
+ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS + VITS_MULTIMODAL_CONFIGS
 
 # Set the supported goals
 CLASSIFICATION = "classify"
 SEGMENTATION = "segmentation"
 MICROBENCHMARK = "microbenchmark"
+MULTIMODAL = "multimodal"
 
 DNN_GOAL = {
     # Classification CNNs
@@ -103,6 +109,9 @@ DNN_GOAL = {
     # Classification transformer
     **{k: CLASSIFICATION for k in VIT_CLASSIFICATION_CONFIGS},
     # Segmentation nets
+
+    # Multimodal
+    **{k: MULTIMODAL for k in VITS_MULTIMODAL_CONFIGS}
 }
 
 # Error threshold for the test
@@ -110,6 +119,8 @@ DNN_THRESHOLD = {
     CLASSIFICATION: 1.0e-3,
     SEGMENTATION: 1.0e-3,
     MICROBENCHMARK: 1.0e-3,
+    MULTIMODAL: 1.0e-3,
+
 }
 
 ITERATION_INTERVAL_LOG_HELPER_PRINT = {
@@ -127,7 +138,8 @@ IMAGENET = "imagenet"
 COCO = "coco"
 DATASETS = {
     CLASSIFICATION: IMAGENET,
-    SEGMENTATION: COCO
+    SEGMENTATION: COCO,
+    MULTIMODAL: COCO,
 }
 
 CLASSES = {
@@ -149,4 +161,8 @@ TENSORRT_FILE_POSFIX = "_tensorrt.ts"
 SAMPLER_SEED = 2147483647
 
 # code types that can be evaluated
-GROUDING_DINO, MAXIMALS, SELECTIVE_ECC = range(3)
+GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC = "grounding_dino", "maximals", "selective_ecc"
+
+ALL_SETUP_TYPES = [
+    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC
+]
