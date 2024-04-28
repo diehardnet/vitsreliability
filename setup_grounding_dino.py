@@ -5,6 +5,7 @@ import random
 from typing import Tuple, List, Union
 
 import torch
+import torchvision.datasets.coco
 
 from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
 from GroundingDINO.groundingdino.models import build_model as gdino_build_model
@@ -26,7 +27,7 @@ import common
 
 
 def load_model(model_checkpoint_path: str, model_config_path: str, hardened_model: bool,
-               torch_compile: bool) -> [any, torch.nn.Module]:
+               torch_compile: bool) -> [str, torch.nn.Module]:
     # The First option is the baseline option
     cfg_args = gdino_SLConfig.fromfile(model_config_path)
     cfg_args.device = configs.GPU_DEVICE
@@ -49,7 +50,7 @@ def load_model(model_checkpoint_path: str, model_config_path: str, hardened_mode
     return cfg_args.text_encoder_type, model
 
 
-def load_dataset(batch_size: int, test_sample: int, text_encoder_type) -> Tuple[List, List, List]:
+def load_dataset(batch_size: int, test_sample: int) -> Tuple[List, List, List, torchvision.datasets.coco.CocoDetection]:
     # build dataloader
     transform = gdino_transforms.Compose(
         [
@@ -62,12 +63,13 @@ def load_dataset(batch_size: int, test_sample: int, text_encoder_type) -> Tuple[
     test_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1,
                                               collate_fn=gdino_collate_fn)
 
-    # build post processor
-    tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
-    postprocessor = GDINOPostProcessCocoGrounding(coco_api=dataset.coco, tokenlizer=tokenlizer)
-
-    # build evaluator
-    evaluator = GDINOCocoGroundingEvaluator(dataset.coco, iou_types=("bbox",), useCats=True)
+    # # build post processor
+    # tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
+    # postprocessor = GDINOPostProcessCocoGrounding(coco_api=dataset.coco, tokenlizer=tokenlizer)
+    #
+    # # build evaluator
+    # evaluator = GDINOCocoGroundingEvaluator(dataset.coco, iou_types=("bbox",), useCats=True)
+    coco_api = dataset.coco
 
     # build captions
     category_dict = dataset.coco.dataset['categories']
@@ -78,24 +80,44 @@ def load_dataset(batch_size: int, test_sample: int, text_encoder_type) -> Tuple[
     # For each image in the batch I'm searching for the COCO classes
     input_captions = [caption] * batch_size
 
-    input_dataset, input_labels = list(), list()
-    for i, (inputs, labels) in enumerate(test_loader):
+    input_dataset, gt_targets = list(), list()
+    for i, (inputs, targets) in enumerate(test_loader):
         # Only the inputs must be in the device
         input_dataset.append(inputs.to(configs.GPU_DEVICE))
-        input_labels.append(labels)
+        gt_targets.append(targets)
         if i == test_sample:
             break
 
-    return input_dataset, input_labels, input_captions
+    return input_dataset, gt_targets, input_captions, coco_api
 
 
-def compare_detection(output_tensor: torch.tensor,
-                      golden_tensor: torch.tensor,
-                      golden_top_k_labels: torch.tensor,
-                      ground_truth_labels: torch.tensor,
-                      batch_id: int,
-                      top_k: int,
-                      output_logger: logging.Logger, float_threshold: float, original_dataset_order: range) -> int:
+def get_iou_for_single_image(outputs, targets, text_encoder_type: str,
+                             coco_api: torchvision.datasets.coco.CocoDetection) -> [float, float]:
+    # build post processor
+    tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
+    postprocessor = GDINOPostProcessCocoGrounding(coco_api=coco_api, tokenlizer=tokenlizer)
+    # build evaluator
+    evaluator = GDINOCocoGroundingEvaluator(coco_api, iou_types=("bbox",), useCats=True)
+    orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+    results = postprocessor(outputs[1], orig_target_sizes)
+    cocogrounding_res = {target["image_id"]: output for target, output in zip(targets, results)}
+    evaluator.update(cocogrounding_res)
+    evaluator.synchronize_between_processes()
+    evaluator.accumulate()
+    evaluator.summarize()
+    average_precision, average_recall = 0, 0
+    return average_precision, average_recall
+
+
+def compare_detection(
+        output_tensor: torch.tensor,
+        golden_tensor: torch.tensor,
+        ground_truth_labels: torch.tensor,
+        batch_id: int,
+        output_logger: logging.Logger, float_threshold: float,
+        text_encoder_type: str,
+        coco_api: torchvision.datasets.coco.CocoDetection
+) -> int:
     # global TEST
     # TEST += 1
     # if TEST == 3:
@@ -123,14 +145,23 @@ def compare_detection(output_tensor: torch.tensor,
             output_logger.error(info_detail)
         dnn_log_helper.log_info_detail(info_detail)
 
+    # TODO: Prepare a way for only single images for the critical failure detection
+
     output_errors = 0
     # Iterate over the batches
-    for img_id, (output_batch, golden_batch, golden_batch_label, ground_truth_label) in enumerate(
-            zip(output_tensor, golden_tensor, golden_top_k_labels, ground_truth_labels)):
+    for img_id, (output_batch, golden_batch, ground_truth_label) in enumerate(
+            zip(output_tensor, golden_tensor, ground_truth_labels)):
         # using the same approach as the detection, compare only the positions that differ
         if common.equal(rhs=golden_batch, lhs=output_batch, threshold=float_threshold) is False:
             # ------------ Check if there is a Critical error ----------------------------------------------------------
-            err_string = ""
+            avg_precision, avg_recall = get_iou_for_single_image(outputs=output_batch, targets=golden_batch,
+                                                                 text_encoder_type=text_encoder_type,
+                                                                 coco_api=coco_api)
+            err_string = f"batch:{batch_id} imgid:{img_id} gd_pre:{avg_precision} gd_rec:{avg_recall} "
+            avg_precision, avg_recall = get_iou_for_single_image(outputs=output_batch, targets=ground_truth_label,
+                                                                 text_encoder_type=text_encoder_type,
+                                                                 coco_api=coco_api)
+            err_string += f" gt_pre:{avg_precision} gt_rec:{avg_recall} "
             # ------------ Check error on the whole output -------------------------------------------------------------
             # Not necessary to save everything, only the good info
             # Data on output tensor
@@ -162,6 +193,34 @@ def print_setup_iteration(batch_id: Union[int, None], comparison_time: float, co
         terminal_logger.debug(iteration_out)
 
 
+def check_dnn_accuracy(predicted: List, ground_truth: List, output_logger: logging.Logger,
+                       coco_api: torchvision.datasets.coco.CocoDetection, text_encoder_type: str) -> None:
+    # build post processor
+    tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
+    postprocessor = GDINOPostProcessCocoGrounding(coco_api=coco_api, tokenlizer=tokenlizer)
+
+    # build evaluator
+    evaluator = GDINOCocoGroundingEvaluator(coco_api, iou_types=("bbox",), useCats=True)
+    for outputs, targets in zip(predicted, ground_truth):
+        orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+        results = postprocessor(outputs[1], orig_target_sizes)
+        cocogrounding_res = {target["image_id"]: output for target, output in zip(targets, results)}
+
+        evaluator.update(cocogrounding_res)
+
+    evaluator.synchronize_between_processes()
+    evaluator.accumulate()
+    evaluator.summarize()
+
+    if output_logger:
+        stats_list = evaluator.coco_eval["bbox"].stats.tolist()
+        correctness = sum(stats_list) / len(stats_list)
+        output_logger.debug(f'Final results:{correctness * 100.0:.2f}%')
+        correctness_threshold = 0.6  # Base on the whole dataset accuracy
+        if correctness < correctness_threshold:
+            dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY LOWER THAN {correctness_threshold * 100.0}%")
+
+
 # Force no grad
 @torch.no_grad()
 def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]):
@@ -191,7 +250,7 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
     # This will save time
     if args.generate is False:
         # Save everything in the same list
-        [golden, input_list, input_labels, model, input_captions] = torch.load(args.goldpath)
+        [golden, input_list, gt_targets, model, input_captions, text_encoder_type, coco_api] = torch.load(args.goldpath)
     else:
         # The First step is to load the inputs in the memory
         # Load the model
@@ -199,10 +258,9 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
             model_checkpoint_path=args.checkpointpath, model_config_path=args.configpath,
             hardened_model=args.hardenedid, torch_compile=args.usetorchcompile
         )
-        input_list, input_labels, input_captions = load_dataset(
-            batch_size=args.batchsize, test_sample=args.testsamples, text_encoder_type=text_encoder_type
-        )
-        golden = dict()
+        input_list, gt_targets, input_captions, coco_api = load_dataset(batch_size=args.batchsize,
+                                                                        test_sample=args.testsamples)
+        golden = list()
 
     timer.toc()
     golden_load_diff_time = timer.diff_time_str
@@ -226,17 +284,23 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
             kernel_time = timer.diff_time
             # Always copy to CPU
             timer.tic()
-            for key, value in dnn_output.items():
-                value.to(configs.CPU)
+            dnn_output_cpu = {k: v.to(configs.CPU) for k, v in dnn_output.items()}
             timer.toc()
             copy_to_cpu_time = timer.diff_time
             # Then compare the golden with the output
             timer.tic()
             errors = 0
             if args.generate is False:
-                pass
+                errors = compare_detection(
+                    output_tensor=dnn_output_cpu,
+                    golden_tensor=golden[batch_id],
+                    ground_truth_labels=gt_targets[batch_id],
+                    batch_id=batch_id,
+                    output_logger=terminal_logger, float_threshold=float_threshold,
+                    text_encoder_type=text_encoder_type,
+                    coco_api=coco_api)
             else:
-                pass
+                golden.append((batch_id, dnn_output_cpu))
 
             timer.toc()
             comparison_time = timer.diff_time
@@ -250,8 +314,8 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
                 # Free cuda memory
                 torch.cuda.empty_cache()
                 # Everything in the same list
-                [golden, input_list, input_labels, model, input_captions] = torch.load(
-                    args.goldpath)
+                [golden, input_list, gt_targets, model,
+                 input_captions, text_encoder_type, coco_api] = torch.load(args.goldpath)
 
             # Printing timing information
             print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
@@ -262,11 +326,11 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
 
     if args.generate is True:
         torch.save(
-            obj=[golden, input_list, input_labels, model, input_captions],
+            obj=[golden, input_list, gt_targets, model, input_captions],
             f=args.goldpath
         )
-        # check_dnn_accuracy(predicted=golden, ground_truth=input_labels, output_logger=terminal_logger,
-        #                    dnn_goal=dnn_goal)
+        check_dnn_accuracy(predicted=golden, ground_truth=gt_targets, output_logger=terminal_logger, coco_api=coco_api,
+                           text_encoder_type=text_encoder_type)
 
     if terminal_logger:
         terminal_logger.debug("Finish computation.")
