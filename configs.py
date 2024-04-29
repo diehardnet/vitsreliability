@@ -128,7 +128,10 @@ ITERATION_INTERVAL_LOG_HELPER_PRINT = {
     **{k: 10 for k in CNN_CONFIGS},
     **{k: 10 for k in VIT_CLASSIFICATION_CONFIGS},
     # Segmentation nets, huge
-    MICROBENCHMARK: 100
+    MICROBENCHMARK: 100,
+
+    # Multimodal
+    **{k: 1 for k in VITS_MULTIMODAL_CONFIGS}
 }
 
 # This max size will determine the max number of images in all datasets

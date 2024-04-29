@@ -44,3 +44,11 @@ generate_dino:
 				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \
 				--setup_type grounding_dino --model $(MODEL_NAME)
 
+test_dino:
+	PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} \
+	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
+                --testsamples $(TEST_SAMPLES) \
+				--goldpath $(GOLD_PATH) \
+				--checkpointpath $(CHECKPOINT_PATH) \
+				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \
+				--setup_type grounding_dino --model $(MODEL_NAME)
