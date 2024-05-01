@@ -10,11 +10,13 @@ GOLD_PATH = $(DATA_DIR)/$(MODEL_NAME).pt
 CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
 CHECKPOINT_PATH = $(DATA_DIR)/weights_grouding_dino/groundingdino_swint_ogc.pth
 
-GET_DATASET=0
+ENABLE_MAXIMALS=0
 
-ifeq ($(GET_DATASET), 1)
-ADDARGS= --downloaddataset
+ifeq ($(ENABLE_MAXIMALS), 1)
+ADDARGS= --hardenedid
 endif
+
+
 
 all: test generate
 
@@ -23,33 +25,36 @@ TEST_SAMPLES=8
 ITERATIONS=10
 PRECISION = fp32
 
+ENV_VARS = PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} CUBLAS_WORKSPACE_CONFIG=:4096:8
+
 generate:
-	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
+	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
                   --testsamples $(TEST_SAMPLES) \
-              --goldpath $(GOLD_PATH) \
-              --checkpointdir $(CHECKPOINTS) \
-              --generate $(ADDARGS)
+				  --goldpath $(GOLD_PATH) \
+				  --checkpointdir $(CHECKPOINTS) \
+				  --generate $(ADDARGS)
 
 test:
-	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
+	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
                   --testsamples $(TEST_SAMPLES) \
-              --goldpath $(GOLD_PATH) \
-              --checkpointdir $(CHECKPOINTS)
+				  --goldpath $(GOLD_PATH) \
+				  --checkpointdir $(CHECKPOINTS) \
+              	  $(ADDARGS)
 
 generate_dino:
-	PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} \
-	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
+	$(ENV_VARS) $SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
                 --testsamples $(TEST_SAMPLES)  --generate \
 				--goldpath $(GOLD_PATH) \
 				--checkpointpath $(CHECKPOINT_PATH) \
 				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \
-				--setup_type grounding_dino --model $(MODEL_NAME)
+				--setup_type grounding_dino --model $(MODEL_NAME) \
+              	$(ADDARGS)
 
 test_dino:
-	PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} \
-	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
-                --testsamples $(TEST_SAMPLES) --hardenedid \
+	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
+                --testsamples $(TEST_SAMPLES) \
 				--goldpath $(GOLD_PATH) \
 				--checkpointpath $(CHECKPOINT_PATH) \
 				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \
-				--setup_type grounding_dino --model $(MODEL_NAME)
+				--setup_type grounding_dino --model $(MODEL_NAME) \
+              	$(ADDARGS)

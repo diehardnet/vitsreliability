@@ -212,16 +212,16 @@ def print_setup_iteration(batch_id: Union[int, None], comparison_time: float, co
 
 # Force no grad
 @torch.no_grad()
-def run_setup_selective_ecc(args: argparse.Namespace, args_text_list: List[str]):
+def run_setup_selective_ecc(args: argparse.Namespace):
     # Define DNN goal
     dnn_goal = configs.DNN_GOAL[args.model]
     dataset = configs.DATASETS[dnn_goal]
     float_threshold = configs.DNN_THRESHOLD[dnn_goal]
+    args_dict = vars(args)
     dnn_log_helper.start_setup_log_file(framework_name="PyTorch", torch_version=torch.__version__,
                                         gpu=torch.cuda.get_device_name(), timm_version=timm.__version__,
-                                        args_conf=args_text_list, dnn_name=args.model,
                                         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
-                                        float_threshold=float_threshold)
+                                        float_threshold=float_threshold, **args_dict)
 
     # Check if a device is ok and disable grad
     common.check_and_setup_gpu()
@@ -252,7 +252,7 @@ def run_setup_selective_ecc(args: argparse.Namespace, args_text_list: List[str])
     golden_load_diff_time = timer.diff_time_str
 
     if terminal_logger:
-        terminal_logger.debug("\n".join(args_text_list))
+        terminal_logger.debug("\n".join(f"{k}:{v}" for k, v in args_dict.items()))
         terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
 
     # Main setup loop

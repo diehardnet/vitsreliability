@@ -161,7 +161,7 @@ TMP_CRASH_FILE = "/tmp/vitsreliability_crash_file.txt"
 TENSORRT_FILE_POSFIX = "_tensorrt.ts"
 
 # Seed used for sampling
-SAMPLER_SEED = 2147483647
+TORCH_SEED = 0
 
 # code types that can be evaluated
 GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC = "grounding_dino", "maximals", "selective_ecc"

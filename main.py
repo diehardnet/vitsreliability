@@ -8,7 +8,7 @@ from setup_grounding_dino import run_setup_grounding_dino
 from setup_selective_ecc import run_setup_selective_ecc
 
 
-def parse_args() -> Tuple[argparse.Namespace, List[str]]:
+def parse_args() -> argparse.Namespace:
     """ Parse the args and return an args namespace and the tostring from the args    """
     parser = argparse.ArgumentParser(description='PyTorch ViTs radiation setup', add_help=True)
     parser.add_argument('--iterations', default=1879048191, help="Iterations to run forever", type=int)
@@ -48,19 +48,18 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
     if args.usetorchcompile is True:
         dnn_log_helper.log_and_crash(fatal_string="Torch compile is not savable yet.")
 
-    args_text_list = [f"{k}={v}" for k, v in vars(args).items()]
-    return args, args_text_list
+    return args
 
 
 def main():
-    args, args_text_list = parse_args()
+    args = parse_args()
 
     if args.setup_type == configs.GROUNDING_DINO:
-        run_setup_grounding_dino(args=args, args_text_list=args_text_list)
+        run_setup_grounding_dino(args=args)
     elif args.setup_type == configs.MAXIMALS:
         pass
     elif args.setup_type == configs.SELECTIVE_ECC:
-        run_setup_selective_ecc(args=args, args_text_list=args_text_list)
+        run_setup_selective_ecc(args=args)
     else:
         dnn_log_helper.log_and_crash(fatal_string=f"Code type {args.code_type} not implemented")
 

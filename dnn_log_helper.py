@@ -12,12 +12,12 @@ import configs
 __LOGGING_ACTIVE = False
 
 
-def start_setup_log_file(framework_name: str, dnn_name: str, activate_logging: bool, **kwargs) -> None:
+def start_setup_log_file(activate_logging: bool, **kwargs) -> None:
     global __LOGGING_ACTIVE
     __LOGGING_ACTIVE = activate_logging
     if __LOGGING_ACTIVE:
-        bench_name = f"{framework_name}-{dnn_name}"
-        log_helper.start_log_file(bench_name, " ".join({f"{k}:{v}" for k, v in kwargs.items()}))
+        dnn_name = kwargs.get("model")
+        log_helper.start_log_file(dnn_name, " ".join({f"{k}:{v}" for k, v in kwargs.items()}))
         log_helper.set_max_errors_iter(configs.MAXIMUM_ERRORS_PER_ITERATION)
         log_helper.set_max_infos_iter(configs.MAXIMUM_INFOS_PER_ITERATION)
         interval_print = configs.ITERATION_INTERVAL_LOG_HELPER_PRINT[dnn_name]

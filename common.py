@@ -59,4 +59,6 @@ def check_and_setup_gpu() -> None:
     if dev_capability[0] < configs.MINIMUM_DEVICE_CAPABILITY:
         dnn_log_helper.log_and_crash(fatal_string=f"Device cap:{dev_capability} is too old.")
 
-
+    torch.backends.cudnn.deterministic = True
+    torch.manual_seed(configs.TORCH_SEED)
+    torch.use_deterministic_algorithms(mode=True, warn_only=True)
