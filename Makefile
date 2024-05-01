@@ -21,6 +21,7 @@ all: test generate
 BATCH_SIZE = 1
 TEST_SAMPLES=8
 ITERATIONS=10
+PRECISION = fp32
 
 generate:
 	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
@@ -37,7 +38,7 @@ test:
 
 generate_dino:
 	PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} \
-	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
+	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
                 --testsamples $(TEST_SAMPLES)  --generate \
 				--goldpath $(GOLD_PATH) \
 				--checkpointpath $(CHECKPOINT_PATH) \
@@ -46,8 +47,8 @@ generate_dino:
 
 test_dino:
 	PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} \
-	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
-                --testsamples $(TEST_SAMPLES) \
+	$(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
+                --testsamples $(TEST_SAMPLES) --hardenedid \
 				--goldpath $(GOLD_PATH) \
 				--checkpointpath $(CHECKPOINT_PATH) \
 				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \

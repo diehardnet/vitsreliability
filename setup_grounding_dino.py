@@ -3,7 +3,6 @@ import logging
 import os
 from typing import Tuple, List, Union
 
-import numpy as np
 import torch
 import torchvision.datasets.coco
 
@@ -24,10 +23,11 @@ import configs
 import console_logger
 import dnn_log_helper
 import common
+import hardened_identity
 
 
 def load_model(model_checkpoint_path: str, model_config_path: str, hardened_model: bool,
-               torch_compile: bool) -> [str, torch.nn.Module]:
+               torch_compile: bool, precision: str, model_name: str) -> [str, torch.nn.Module]:
     # The First option is the baseline option
     cfg_args = gdino_SLConfig.fromfile(model_config_path)
     cfg_args.device = configs.GPU_DEVICE
@@ -40,7 +40,12 @@ def load_model(model_checkpoint_path: str, model_config_path: str, hardened_mode
     model = model.to(configs.GPU_DEVICE)
 
     if hardened_model:
-        raise NotImplementedError("Hardened Id not ready")
+        hardened_identity.replace_identity(module=model, profile_or_inference="inference", model_name=model_name)
+    if precision == configs.FP16:
+        model = model.half()
+
+    elif precision != configs.FP32:
+        raise NotImplementedError("Only supports FP32 and FP16")
 
     # TODO: Implement when the serialization is possible
     if torch_compile is True:
@@ -50,14 +55,24 @@ def load_model(model_checkpoint_path: str, model_config_path: str, hardened_mode
     return cfg_args.text_encoder_type, model
 
 
-def load_dataset(batch_size: int, test_sample: int) -> Tuple[List, List, List, torchvision.datasets.coco.CocoDetection]:
+def load_dataset(
+        batch_size: int, test_sample: int, precision: str, output_logger: logging.Logger
+) -> Tuple[List, List, List, torchvision.datasets.coco.CocoDetection]:
     # build dataloader
+    class CustomToFP16(object):
+        def __call__(self, tensor_in, target):
+            return tensor_in.type(torch.float16), target
+
+    mixed_precision_transforms = list()
+    if precision == configs.FP16:
+        mixed_precision_transforms = [CustomToFP16()]
+
     transform = gdino_transforms.Compose(
         [
             gdino_transforms.RandomResize([800], max_size=1333),
             gdino_transforms.ToTensor(),
             gdino_transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
+        ] + mixed_precision_transforms
     )
     dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
     test_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1,
@@ -69,7 +84,8 @@ def load_dataset(batch_size: int, test_sample: int) -> Tuple[List, List, List, t
     cat_list = [item['name'] for item in category_dict]
     caption = " . ".join(cat_list) + ' .'
     # TODO: try a different prompt
-    print("Input text prompt:", caption)
+    if output_logger:
+        output_logger.debug(f"Input text prompt:{caption}")
     # For each image in the batch I'm searching for the COCO classes
     input_captions = [caption] * batch_size
 
@@ -231,7 +247,7 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
         framework_name="PyTorch", torch_version=torch.__version__,
         gpu=torch.cuda.get_device_name(), args_conf=args_text_list, dnn_name=args.model,
         activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
-        float_threshold=float_threshold
+        float_threshold=float_threshold, prompt_type=args.textprompt
     )
     dnn_log_helper.start_setup_log_file(**log_args)
     if args.batchsize != 1:
@@ -257,10 +273,12 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
         # Load the model
         text_encoder_type, model = load_model(
             model_checkpoint_path=args.checkpointpath, model_config_path=args.configpath,
-            hardened_model=args.hardenedid, torch_compile=args.usetorchcompile
+            hardened_model=args.hardenedid, torch_compile=args.usetorchcompile, precision=args.precision
         )
         input_list, gt_targets, input_captions, coco_api = load_dataset(batch_size=args.batchsize,
-                                                                        test_sample=args.testsamples)
+                                                                        test_sample=args.testsamples,
+                                                                        precision=args.precision,
+                                                                        output_logger=terminal_logger)
         golden = list()
 
     timer.toc()

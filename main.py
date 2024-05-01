@@ -28,6 +28,12 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
 
     parser.add_argument('--setup_type', help="Setup type", choices=configs.ALL_SETUP_TYPES, type=str, required=True)
 
+    parser.add_argument('--precision', help="Float precision", choices=configs.ALLOWED_MODEL_PRECISIONS, type=str,
+                        required=True, default=configs.FP32)
+
+    parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
+                        type=str, required=False, default="coco_classes")
+
     parser.add_argument('--model', help="Model name", choices=configs.ALL_POSSIBLE_MODELS, type=str, required=True)
 
     args = parser.parse_args()
