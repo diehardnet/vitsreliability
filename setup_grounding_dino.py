@@ -273,7 +273,8 @@ def run_setup_grounding_dino(args: argparse.Namespace, args_text_list: List[str]
         # Load the model
         text_encoder_type, model = load_model(
             model_checkpoint_path=args.checkpointpath, model_config_path=args.configpath,
-            hardened_model=args.hardenedid, torch_compile=args.usetorchcompile, precision=args.precision
+            hardened_model=args.hardenedid, torch_compile=args.usetorchcompile, precision=args.precision,
+            model_name=args.model
         )
         input_list, gt_targets, input_captions, coco_api = load_dataset(batch_size=args.batchsize,
                                                                         test_sample=args.testsamples,
