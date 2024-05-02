@@ -12,7 +12,8 @@ class HardenedIdentity(torch.nn.Identity):
 
     # values from profiling, see profiler.py
     __PROFILES = {
-        configs.GROUNDING_DINO_SWINT_OGC: (-279.20074462890625, 500.12542724609375)
+        configs.GROUNDING_DINO_SWINT_OGC: (-279.20074462890625, 500.12542724609375),
+        configs.GROUNDING_DINO_SWINB_COGCOOR: (-361.2831115722656, 436.7012939453125)
     }
 
     # each min/max value is multiply by this constant to avoid too tight value restriction

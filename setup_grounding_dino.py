@@ -38,6 +38,9 @@ class SetupGroundingDINO(SetupBase):
         if args.batchsize != 1:
             raise NotImplementedError("For now, the only batch size allowed is 1")
 
+        if self.precision != configs.FP32:
+            raise NotImplementedError("Precisions different than FP32 are not available for now")
+
     @property
     def num_batches(self):
         return len(self.input_list)
@@ -60,12 +63,6 @@ class SetupGroundingDINO(SetupBase):
         if self.hardened_model:
             hardened_identity.replace_identity(module=self.model, profile_or_inference="inference",
                                                model_name=self.model_name)
-        if self.precision == configs.FP16:
-            self.model = self.model.half()
-
-        elif self.precision != configs.FP32:
-            raise NotImplementedError("Only supports FP32 and FP16")
-
         # TODO: Implement when the serialization is possible
         if self.torch_compile is True:
             # model = torch.compile(model=model, mode="max-autotune")
@@ -77,20 +74,12 @@ class SetupGroundingDINO(SetupBase):
 
     def load_dataset(self) -> None:
         # build dataloader
-        class CustomToFP16(object):
-            def __call__(self, tensor_in, target):
-                return tensor_in.type(torch.float16), target
-
-        mixed_precision_transforms = list()
-        if self.precision == configs.FP16:
-            mixed_precision_transforms = [CustomToFP16()]
-
         transform = gdino_transforms.Compose(
             [
                 gdino_transforms.RandomResize([800], max_size=1333),
                 gdino_transforms.ToTensor(),
                 gdino_transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-            ] + mixed_precision_transforms
+            ]
         )
         dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
         test_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=1,

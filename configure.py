@@ -12,8 +12,8 @@ import configs
 # It is either false or true
 # FIXME: In the future - now it is not possible to save torch compile models
 TORCH_COMPILE_CONFIGS = {False}  # torch.cuda.get_device_capability()[0] >= 7}
-HARDENING_TYPES = {None} # , "hardenedid"}
-FLOAT_PRECISION = {"fp32"}  # , "fp16"}
+HARDENING_TYPES = {None , "hardenedid"}
+FLOAT_PRECISION = {"fp32"}
 FLOAT_THRESHOLD = 1e-3
 
 ALL_DNNS = {
