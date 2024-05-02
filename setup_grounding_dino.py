@@ -1,10 +1,8 @@
 import argparse
 import logging
-import os
-from typing import Tuple, List, Union
+from typing import Union
 
 import torch
-import torchvision.datasets.coco
 
 from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
 from GroundingDINO.groundingdino.models import build_model as gdino_build_model
@@ -20,339 +18,230 @@ from GroundingDINO.groundingdino.datasets.cocogrounding_eval import (
 )
 
 import configs
-import console_logger
 import dnn_log_helper
 import common
 import hardened_identity
+from setup_base import SetupBase
 
 
-def load_model(model_checkpoint_path: str, model_config_path: str, hardened_model: bool,
-               torch_compile: bool, precision: str, model_name: str) -> [str, torch.nn.Module]:
-    # The First option is the baseline option
-    cfg_args = gdino_SLConfig.fromfile(model_config_path)
-    cfg_args.device = configs.GPU_DEVICE
-    model = gdino_build_model(cfg_args)
-    checkpoint = torch.load(model_checkpoint_path, map_location=configs.GPU_DEVICE)
-    model.load_state_dict(gdino_clean_state_dict(checkpoint["model"]), strict=False)
-    model.eval()
-    # Disable also parameter grads
-    model.zero_grad(set_to_none=True)
-    model = model.to(configs.GPU_DEVICE)
+class SetupGroundingDINO(SetupBase):
+    def __init__(self, args: argparse.Namespace, output_logger: logging.Logger):
+        super().__init__(args=args, output_logger=output_logger)
+        self.text_encoder_type = ""
+        self.model = None
+        self.golden = list()
+        self.input_list = list()
+        self.gt_targets = list()
+        self.coco_api = None
+        self.correctness_threshold = 0.6  # Based on the whole dataset accuracy. Used only for golden generate part
 
-    if hardened_model:
-        hardened_identity.replace_identity(module=model, profile_or_inference="inference", model_name=model_name)
-    if precision == configs.FP16:
-        model = model.half()
+        if args.batchsize != 1:
+            raise NotImplementedError("For now, the only batch size allowed is 1")
 
-    elif precision != configs.FP32:
-        raise NotImplementedError("Only supports FP32 and FP16")
+    @property
+    def num_batches(self):
+        return len(self.input_list)
 
-    # TODO: Implement when the serialization is possible
-    if torch_compile is True:
-        # model = torch.compile(model=model, mode="max-autotune")
-        dnn_log_helper.log_and_crash(fatal_string="Up to now it's not possible to serialize compiled models "
-                                                  "(github.com/pytorch/pytorch/issues/101107#issuecomment-1542688089)")
-    return cfg_args.text_encoder_type, model
+    def __call__(self, batch_id, **kwargs):
+        return self.model(self.input_list[batch_id], captions=self.input_captions)
 
+    def load_model(self) -> None:
+        # The First option is the baseline option
+        cfg_args = gdino_SLConfig.fromfile(self.model_config_path)
+        cfg_args.device = configs.GPU_DEVICE
+        self.model = gdino_build_model(cfg_args)
+        checkpoint = torch.load(self.model_checkpoint_path, map_location=configs.GPU_DEVICE)
+        self.model.load_state_dict(gdino_clean_state_dict(checkpoint["model"]), strict=False)
+        self.model.eval()
+        # Disable also parameter grads
+        self.model.zero_grad(set_to_none=True)
+        self.model = self.model.to(configs.GPU_DEVICE)
 
-def load_dataset(
-        batch_size: int, test_sample: int, precision: str, output_logger: logging.Logger
-) -> Tuple[List, List, List, torchvision.datasets.coco.CocoDetection]:
-    # build dataloader
-    class CustomToFP16(object):
-        def __call__(self, tensor_in, target):
-            return tensor_in.type(torch.float16), target
+        if self.hardened_model:
+            hardened_identity.replace_identity(module=self.model, profile_or_inference="inference",
+                                               model_name=self.model_name)
+        if self.precision == configs.FP16:
+            self.model = self.model.half()
 
-    mixed_precision_transforms = list()
-    if precision == configs.FP16:
-        mixed_precision_transforms = [CustomToFP16()]
+        elif self.precision != configs.FP32:
+            raise NotImplementedError("Only supports FP32 and FP16")
 
-    transform = gdino_transforms.Compose(
-        [
-            gdino_transforms.RandomResize([800], max_size=1333),
-            gdino_transforms.ToTensor(),
-            gdino_transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ] + mixed_precision_transforms
-    )
-    dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
-    test_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1,
-                                              collate_fn=gdino_collate_fn)
-    coco_api = dataset.coco
+        # TODO: Implement when the serialization is possible
+        if self.torch_compile is True:
+            # model = torch.compile(model=model, mode="max-autotune")
+            dnn_log_helper.log_and_crash(
+                fatal_string="Up to now it's not possible to serialize compiled models "
+                             "(github.com/pytorch/pytorch/issues/101107#issuecomment-1542688089)"
+            )
+        self.text_encoder_type = cfg_args.text_encoder_type
 
-    # build captions
-    category_dict = dataset.coco.dataset['categories']
-    cat_list = [item['name'] for item in category_dict]
-    caption = " . ".join(cat_list) + ' .'
-    # TODO: try a different prompt
-    if output_logger:
-        output_logger.debug(f"Input text prompt:{caption}")
-    # For each image in the batch I'm searching for the COCO classes
-    input_captions = [caption] * batch_size
+    def load_dataset(self) -> None:
+        # build dataloader
+        class CustomToFP16(object):
+            def __call__(self, tensor_in, target):
+                return tensor_in.type(torch.float16), target
 
-    input_dataset, gt_targets = list(), list()
-    for i, (inputs, targets) in enumerate(test_loader):
-        # Only the inputs must be in the device
-        input_dataset.append(inputs.to(configs.GPU_DEVICE))
-        gt_targets.append(targets)
-        if i == test_sample:
-            break
+        mixed_precision_transforms = list()
+        if self.precision == configs.FP16:
+            mixed_precision_transforms = [CustomToFP16()]
 
-    return input_dataset, gt_targets, input_captions, coco_api
-
-
-def get_iou_for_single_image_at_test(
-        corrupted_output: dict, original_targets: list, text_encoder_type: str,
-        coco_api: torchvision.datasets.coco.CocoDetection,
-        output_logger: logging.Logger
-) -> [List, List]:
-    # build post processor
-    tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
-    postprocessor = GDINOPostProcessCocoGrounding(coco_api=coco_api, tokenlizer=tokenlizer)
-    # build evaluator
-    evaluator = GDINOCocoGroundingEvaluator(coco_api, iou_types=("bbox",), useCats=True)
-    original_target_sizes = torch.stack([t["orig_size"] for t in original_targets], dim=0)
-
-    # We have to compute both corrupted and golden
-    corrupted_results = postprocessor(corrupted_output, original_target_sizes)
-    golden_vs_out_result = {target["image_id"]: output for target, output in zip(original_targets, corrupted_results)}
-
-    evaluator.update(golden_vs_out_result)
-    evaluator.synchronize_between_processes()
-    evaluator.accumulate()
-    evaluator.summarize()
-
-    bbox_stats = evaluator.coco_eval["bbox"].stats
-    if bbox_stats.size != 12:
-        raise ValueError(f"Incorrect size of stats array: {bbox_stats.size()}")
-    precision, recall = bbox_stats[:6].tolist(), bbox_stats[6:].tolist()
-
-    if output_logger:
-        output_logger.info(f"Precision:{precision} Recall:{recall}")
-
-    return precision, recall
-
-
-def compare_detection(
-        output_dict: dict,
-        golden_dict: dict,
-        gt_targets: List,
-        batch_id: int,
-        output_logger: logging.Logger, float_threshold: float,
-        text_encoder_type: str,
-        coco_api: torchvision.datasets.coco.CocoDetection
-) -> int:
-    # global TEST
-    # TEST += 1
-    # if TEST == 3:
-    #     output_dict["pred_logits"][0, 3] = 39304
-
-    # Make sure that they are on CPU
-    for out_or_gold, dict_data in [("out", output_dict), ("gold", golden_dict)]:
-        for tensor_type, tensor in dict_data.items():
-            if tensor.is_cuda:
-                dnn_log_helper.log_and_crash(
-                    fatal_string=f"Tensor {out_or_gold}-{tensor_type} not on CPU:{tensor.is_cuda}")
-
-    # First check if the tensors are equal or not
-    for output_tensor, golden_tensor in zip(output_dict.values(), golden_dict.values()):
-        out_tensor_filtered = torch.nan_to_num(output_tensor, nan=0.0, posinf=0, neginf=0)
-        gld_tensor_filtered = torch.nan_to_num(golden_tensor, nan=0.0, posinf=0, neginf=0)
-        if common.equal(lhs=out_tensor_filtered, rhs=gld_tensor_filtered, threshold=float_threshold) is False:
-            # no need to continue, we save time
-            break
-    else:
-        return 0
-
-    output_errors = 1
-    # ------------ Check if there is a Critical error ----------------------------------------------------------
-    # FIXME: for multiple batch sizes
-    # gld_precision, gld_recall = get_iou_for_single_image(predicted=output_dict, targets=[golden_dict],
-    #                                                      text_encoder_type=text_encoder_type,
-    #                                                      coco_api=coco_api, output_logger=output_logger)
-    precision, recall = get_iou_for_single_image_at_test(corrupted_output=output_dict,
-                                                         original_targets=gt_targets,
-                                                         text_encoder_type=text_encoder_type,
-                                                         coco_api=coco_api, output_logger=output_logger)
-    err_string = f"batch:{batch_id} gd_pre:{precision} gd_rec:{recall}"
-
-    if output_logger:
-        output_logger.error(err_string)
-    dnn_log_helper.log_error_detail(err_string)
-    # # ------------ Check error on the whole output -------------------------------------------------------------
-    # Not necessary to save everything, only the good info
-    for (out_tensor_type, output_tensor), (gld_tensor_type, golden_tensor) in zip(output_dict.items(),
-                                                                                  golden_dict.items()):
-        # Data on output tensor
-        has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output_tensor)
-        error_detail_out = f"{out_tensor_type} output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
-        # Data on abs differences
-        abs_diff = torch.abs(torch.subtract(output_tensor, golden_tensor))
-        has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
-        error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
-
-        if output_logger:
-            output_logger.error(error_detail_out)
-        dnn_log_helper.log_error_detail(error_detail_out)
-
-    # ------------ log and return
-    if output_errors != 0:
-        dnn_log_helper.log_error_count(error_count=output_errors)
-    return output_errors
-
-
-def print_setup_iteration(batch_id: Union[int, None], comparison_time: float, copy_to_cpu_time: float, errors: int,
-                          kernel_time: float, setup_iteration: int, terminal_logger: logging.Logger) -> None:
-    if terminal_logger:
-        wasted_time = comparison_time + copy_to_cpu_time
-        time_pct = (wasted_time / (wasted_time + kernel_time)) * 100.0
-        iteration_out = f"It:{setup_iteration:<3} batch_id:{batch_id:<3} inference time:{kernel_time:.5f}, "
-        iteration_out += f"compare time:{comparison_time:.5f} copy time:{copy_to_cpu_time:.5f} "
-        iteration_out += f"(wasted:{time_pct:.1f}%) errors:{errors}"
-        terminal_logger.debug(iteration_out)
-
-
-def check_dnn_accuracy(predicted: List, ground_truth: List, output_logger: logging.Logger,
-                       coco_api: torchvision.datasets.coco.CocoDetection, text_encoder_type: str) -> None:
-    # build post processor
-    tokenlizer = gdino_get_tokenlizer.get_tokenlizer(text_encoder_type)
-    postprocessor = GDINOPostProcessCocoGrounding(coco_api=coco_api, tokenlizer=tokenlizer)
-    # build evaluator
-    evaluator = GDINOCocoGroundingEvaluator(coco_api, iou_types=("bbox",), useCats=True)
-    for outputs, targets in zip(predicted, ground_truth):
-        original_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
-        results = postprocessor(outputs, original_target_sizes)
-        coco_grounding_result = {target["image_id"]: output for target, output in zip(targets, results)}
-        evaluator.update(coco_grounding_result)
-    evaluator.synchronize_between_processes()
-    evaluator.accumulate()
-    evaluator.summarize()
-
-    if output_logger:
-        stats_list = evaluator.coco_eval["bbox"].stats.tolist()
-        correctness = sum(stats_list) / len(stats_list)
-        output_logger.debug(f'Final results:{correctness * 100.0:.2f}%')
-        correctness_threshold = 0.6  # Base on the whole dataset accuracy
-        if correctness < correctness_threshold:
-            dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY: {correctness * 100.0}%")
-
-
-# Force no grad
-@torch.no_grad()
-def run_setup_grounding_dino(args: argparse.Namespace):
-    # Define DNN goal
-    dnn_goal = configs.DNN_GOAL[args.model]
-    dataset = configs.DATASETS[dnn_goal]
-    float_threshold = configs.DNN_THRESHOLD[dnn_goal]
-    args_dict = vars(args)
-    log_args = dict(
-        framework_name="PyTorch", torch_version=torch.__version__,
-        gpu=torch.cuda.get_device_name(), activate_logging=not args.generate, dnn_goal=dnn_goal, dataset=dataset,
-        float_threshold=float_threshold, **args_dict
-    )
-    dnn_log_helper.start_setup_log_file(**log_args)
-    if args.batchsize != 1:
-        raise NotImplementedError("For now, the only batch size allowed is 1")
-
-    # Check if a device is ok and disable grad
-    common.check_and_setup_gpu()
-
-    # Defining a timer
-    timer = common.Timer()
-    # Terminal console
-    main_logger_name = str(os.path.basename(__file__)).replace(".py", "")
-    terminal_logger = console_logger.ColoredLogger(main_logger_name) if args.disableconsolelog is False else None
-
-    # Load if it is not a gold generating op
-    timer.tic()
-    # This will save time
-    if args.generate is False:
-        # Save everything in the same list
-        [golden, input_list, gt_targets, model, input_captions, text_encoder_type, coco_api] = torch.load(args.goldpath)
-    else:
-        # The First step is to load the inputs in the memory
-        # Load the model
-        text_encoder_type, model = load_model(
-            model_checkpoint_path=args.checkpointpath, model_config_path=args.configpath,
-            hardened_model=args.hardenedid, torch_compile=args.usetorchcompile, precision=args.precision,
-            model_name=args.model
+        transform = gdino_transforms.Compose(
+            [
+                gdino_transforms.RandomResize([800], max_size=1333),
+                gdino_transforms.ToTensor(),
+                gdino_transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ] + mixed_precision_transforms
         )
-        input_list, gt_targets, input_captions, coco_api = load_dataset(batch_size=args.batchsize,
-                                                                        test_sample=args.testsamples,
-                                                                        precision=args.precision,
-                                                                        output_logger=terminal_logger)
-        golden = list()
+        dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
+        test_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=1,
+                                                  collate_fn=gdino_collate_fn)
+        self.coco_api = dataset.coco
 
-    timer.toc()
-    golden_load_diff_time = timer.diff_time_str
+        # build captions
+        caption = self.input_captions
+        if self.input_captions == '':
+            category_dict = dataset.coco.dataset['categories']
+            cat_list = [item['name'] for item in category_dict]
+            caption = " . ".join(cat_list) + ' .'
 
-    if terminal_logger:
-        terminal_logger.debug("\n".join(f"{k}:{v}" for k, v in args_dict.items()))
-        terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
+        # For each image in the batch I'm searching for the COCO classes
+        self.input_captions = [caption] * self.batch_size
+        if self.output_logger:
+            self.output_logger.debug(f"Input text prompt:{caption}")
 
-    # Main setup loop
-    setup_iteration = 0
-    while setup_iteration < args.iterations:
-        # Loop over the input list
-        batch_id = 0  # It must be like this, because I may reload the list in the middle of the process
-        while batch_id < len(input_list):
-            timer.tic()
-            dnn_log_helper.start_iteration()
-            dnn_output = model(input_list[batch_id], captions=input_captions)
-            torch.cuda.synchronize(device=configs.GPU_DEVICE)
-            dnn_log_helper.end_iteration()
-            timer.toc()
-            kernel_time = timer.diff_time
-            # Always copy to CPU
-            timer.tic()
-            dnn_output_cpu = {k: v.to(configs.CPU) for k, v in dnn_output.items()}
-            timer.toc()
-            copy_to_cpu_time = timer.diff_time
-            # Then compare the golden with the output
-            timer.tic()
-            errors = 0
-            if args.generate is False:
-                errors = compare_detection(output_dict=dnn_output_cpu,
-                                           golden_dict=golden[batch_id],
-                                           gt_targets=gt_targets[batch_id],
-                                           batch_id=batch_id,
-                                           output_logger=terminal_logger,
-                                           float_threshold=float_threshold,
-                                           text_encoder_type=text_encoder_type,
-                                           coco_api=coco_api)
-            else:
-                golden.append(dnn_output_cpu)
+        self.input_list, self.gt_targets = list(), list()
+        for i, (inputs, targets) in enumerate(test_loader):
+            # Only the inputs must be in the device
+            self.input_list.append(inputs.to(configs.GPU_DEVICE))
+            self.gt_targets.append(targets)
+            if i == self.test_sample:
+                break
 
-            timer.toc()
-            comparison_time = timer.diff_time
+    def get_coco_evaluator(self, predicted: list, targets: list) -> GDINOCocoGroundingEvaluator:
+        # build post processor
+        tokenlizer = gdino_get_tokenlizer.get_tokenlizer(self.text_encoder_type)
+        postprocessor = GDINOPostProcessCocoGrounding(coco_api=self.coco_api, tokenlizer=tokenlizer)
+        # build evaluator
+        evaluator = GDINOCocoGroundingEvaluator(self.coco_api, iou_types=("bbox",), useCats=True)
+        for outputs, targets in zip(predicted, targets):
+            original_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+            results = postprocessor(outputs, original_target_sizes)
+            coco_grounding_result = {target["image_id"]: output for target, output in zip(targets, results)}
+            evaluator.update(coco_grounding_result)
+        evaluator.synchronize_between_processes()
+        evaluator.accumulate()
+        evaluator.summarize()
+        return evaluator
 
-            # Reload all the memories after error
-            if errors != 0:
-                if terminal_logger:
-                    terminal_logger.info("RELOADING THE MODEL AND THE INPUTS AFTER ERROR")
-                del input_list
-                del model
-                # Free cuda memory
-                torch.cuda.empty_cache()
-                # Everything in the same list
-                [golden, input_list, gt_targets, model, input_captions, text_encoder_type, coco_api] = torch.load(
-                    args.goldpath)
+    def get_iou_for_single_image_at_test(self, output: dict, batch_id) -> [list, list]:
+        evaluator = self.get_coco_evaluator(predicted=[output], targets=[self.gt_targets[batch_id]])
+        bbox_stats = evaluator.coco_eval["bbox"].stats
+        if bbox_stats.size != 12:
+            raise ValueError(f"Incorrect size of stats array: {bbox_stats.size()}")
+        precision, recall = bbox_stats[:6].tolist(), bbox_stats[6:].tolist()
+        return precision, recall
 
-            # Printing timing information
-            print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time, copy_to_cpu_time=copy_to_cpu_time,
-                                  errors=errors, kernel_time=kernel_time, setup_iteration=setup_iteration,
-                                  terminal_logger=terminal_logger)
-            batch_id += 1
-        setup_iteration += 1
+    def check_dnn_accuracy(self) -> None:
+        evaluator = self.get_coco_evaluator(predicted=self.golden, targets=self.gt_targets)
 
-    if args.generate is True:
+        if self.output_logger:
+            stats_list = evaluator.coco_eval["bbox"].stats.tolist()
+            correctness = sum(stats_list) / len(stats_list)
+            self.output_logger.debug(f'Final results:{correctness * 100.0:.2f}%')
+            if correctness < self.correctness_threshold:
+                dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY: {correctness * 100.0}%")
+
+    def compare_inference(self, output: dict, batch_id) -> int:
+        # global TEST
+        # TEST += 1
+        # if TEST == 3:
+        #     output["pred_logits"][0, 3] = 39304
+        golden_dict = self.golden[batch_id]
+        # Make sure that they are on CPU
+        for out_or_gold, dict_data in [("out", output), ("gold", golden_dict)]:
+            for tensor_type, tensor in dict_data.items():
+                if tensor.is_cuda:
+                    dnn_log_helper.log_and_crash(
+                        fatal_string=f"Tensor {out_or_gold}-{tensor_type} not on CPU:{tensor.is_cuda}")
+
+        # First check if the tensors are equal or not
+        for output_tensor, golden_tensor in zip(output.values(), golden_dict.values()):
+            out_tensor_filtered = torch.nan_to_num(output_tensor, nan=0.0, posinf=0, neginf=0)
+            gld_tensor_filtered = torch.nan_to_num(golden_tensor, nan=0.0, posinf=0, neginf=0)
+            if common.equal(lhs=out_tensor_filtered, rhs=gld_tensor_filtered, threshold=self.float_threshold) is False:
+                # no need to continue, we save time
+                break
+        else:
+            return 0
+
+        output_errors = 1
+        # ------------ Check if there is a Critical error ----------------------------------------------------------
+        precision, recall = self.get_iou_for_single_image_at_test(output=output, batch_id=batch_id)
+        precision = ";".join(f"{v:.6e}" for v in precision)
+        recall = ";".join(f"{v:.6e}" for v in recall)
+        err_string = f"batch:{batch_id} gd_pre:{precision} gd_rec:{recall}"
+
+        if self.output_logger:
+            self.output_logger.error(err_string)
+        dnn_log_helper.log_error_detail(err_string)
+        # # ------------ Check error on the whole output -------------------------------------------------------------
+        # Not necessary to save everything, only the good info
+        for (out_tensor_type, output_tensor), (gld_tensor_type, golden_tensor) in zip(output.items(),
+                                                                                      golden_dict.items()):
+            # Data on output tensor
+            has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output_tensor)
+            error_detail_out = f"{out_tensor_type} output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
+            # Data on abs differences
+            abs_diff = torch.abs(torch.subtract(output_tensor, golden_tensor))
+            has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
+            error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
+
+            if self.output_logger:
+                self.output_logger.error(error_detail_out)
+            dnn_log_helper.log_error_detail(error_detail_out)
+
+        # ------------ log and return
+        if output_errors != 0:
+            dnn_log_helper.log_error_count(error_count=output_errors)
+        return output_errors
+
+    def load_data_at_test(self):
+        # This will save time
+        if self.generate is False:
+            # Save everything in the same list
+            [self.golden, self.input_list, self.gt_targets,
+             self.model, self.input_captions, self.text_encoder_type, self.coco_api] = torch.load(self.gold_path)
+        else:
+            # The First step is to load the inputs in the memory
+            # Load the model
+            self.load_model()
+            self.load_dataset()
+            self.golden = list()
+
+    def save_setup_data_to_gold_file(self):
         torch.save(
-            obj=[golden, input_list, gt_targets, model, input_captions, text_encoder_type, coco_api],
-            f=args.goldpath
+            obj=[self.golden, self.input_list, self.gt_targets,
+                 self.model, self.input_captions, self.text_encoder_type, self.coco_api],
+            f=self.gold_path
         )
-        check_dnn_accuracy(predicted=golden, ground_truth=gt_targets, output_logger=terminal_logger, coco_api=coco_api,
-                           text_encoder_type=text_encoder_type)
 
-    if terminal_logger:
-        terminal_logger.debug("Finish computation.")
+    def clear_gpu_memory_and_reload(self):
+        if self.output_logger:
+            self.output_logger.info("RELOADING THE MODEL AND THE INPUTS AFTER ERROR")
+        del self.input_list
+        del self.model
+        # Free cuda memory
+        torch.cuda.empty_cache()
+        self.load_data_at_test()
 
-    dnn_log_helper.end_log_file()
+    @staticmethod
+    def copy_to_cpu(dnn_output):
+        return {k: v.to(configs.CPU) for k, v in dnn_output.items()}
+
+    def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
+        errors = 0
+        if self.generate is False:
+            errors = self.compare_inference(output=dnn_output_cpu, batch_id=batch_id)
+        else:
+            self.golden.append(dnn_output_cpu)
+        return errors

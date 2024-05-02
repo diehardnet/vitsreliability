@@ -68,16 +68,16 @@ EFFICIENTFORMER_L7 = "efficientformer_l7.snap_dist_in1k"
 
 VIT_CLASSIFICATION_CONFIGS = [
     VIT_BASE_PATCH16_224,
-    VIT_BASE_PATCH32_224_SAM,
+    # VIT_BASE_PATCH32_224_SAM,
     VIT_BASE_PATCH16_384,
-    # VIT_LARGE_PATCH14_CLIP_336, --> Hardening not ready
+    VIT_LARGE_PATCH14_CLIP_336,  # --> Hardening not ready
     VIT_LARGE_PATCH14_CLIP_224,
-    # VIT_HUGE_PATCH14_CLIP_336,  --> Hardening not ready
+    VIT_HUGE_PATCH14_CLIP_336,  # --> Hardening not ready
     VIT_HUGE_PATCH14_CLIP_224,
     MAXVIT_LARGE_TF_384,
     MAXVIT_LARGE_TF_512,
-    # DAVIT_BASE,                 --> Hardening not ready
-    # DAVIT_SMALL,                --> Hardening not ready
+    DAVIT_BASE,  # --> Hardening not ready
+    DAVIT_SMALL,  # --> Hardening not ready
     SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K,
     SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K,
     SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K,
@@ -91,8 +91,10 @@ VIT_CLASSIFICATION_CONFIGS = [
 ]
 
 GROUNDING_DINO_SWINT_OGC = "groundingdino_swint_ogc"
+GROUNDING_DINO_SWINB_COGCOOR = "groundingdino_swinb_cogcoor"
 VITS_MULTIMODAL_CONFIGS = [
-    GROUNDING_DINO_SWINT_OGC
+    GROUNDING_DINO_SWINT_OGC,
+    GROUNDING_DINO_SWINB_COGCOOR
 ]
 
 ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS + VITS_MULTIMODAL_CONFIGS
@@ -102,37 +104,6 @@ CLASSIFICATION = "classify"
 SEGMENTATION = "segmentation"
 MICROBENCHMARK = "microbenchmark"
 MULTIMODAL = "multimodal"
-
-DNN_GOAL = {
-    # Classification CNNs
-    **{k: CLASSIFICATION for k in CNN_CONFIGS},
-    # Classification transformer
-    **{k: CLASSIFICATION for k in VIT_CLASSIFICATION_CONFIGS},
-    # Segmentation nets
-
-    # Multimodal
-    **{k: MULTIMODAL for k in VITS_MULTIMODAL_CONFIGS}
-}
-
-# Error threshold for the test
-DNN_THRESHOLD = {
-    CLASSIFICATION: 1.0e-3,
-    SEGMENTATION: 1.0e-3,
-    MICROBENCHMARK: 1.0e-3,
-    MULTIMODAL: 1.0e-3,
-
-}
-
-ITERATION_INTERVAL_LOG_HELPER_PRINT = {
-    # imagenet not so small
-    **{k: 10 for k in CNN_CONFIGS},
-    **{k: 10 for k in VIT_CLASSIFICATION_CONFIGS},
-    # Segmentation nets, huge
-    MICROBENCHMARK: 100,
-
-    # Multimodal
-    **{k: 1 for k in VITS_MULTIMODAL_CONFIGS}
-}
 
 # This max size will determine the max number of images in all datasets
 DATASET_MAX_SIZE = 50000
@@ -156,9 +127,6 @@ COCO_DATASET_ANNOTATIONS = f"{COCO_DATASET_DIR}/annotations/instances_val2017.js
 
 # File to save last status of the benchmark when log helper not active
 TMP_CRASH_FILE = "/tmp/vitsreliability_crash_file.txt"
-
-# TensorRT file pattern
-TENSORRT_FILE_POSFIX = "_tensorrt.ts"
 
 # Seed used for sampling
 TORCH_SEED = 0

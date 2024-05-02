@@ -4,11 +4,13 @@ import torch
 
 import configs
 import hardened_identity
-from setup_grounding_dino import load_model
 from hardened_identity import replace_identity
 import GroundingDINO.groundingdino.datasets.transforms as gdino_transforms
 from GroundingDINO.groundingdino.util.misc import collate_fn as gdino_collate_fn
 from GroundingDINO.groundingdino.util import get_tokenlizer as gdino_get_tokenlizer
+from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
+from GroundingDINO.groundingdino.models import build_model as gdino_build_model
+from GroundingDINO.groundingdino.util.utils import clean_state_dict as gdino_clean_state_dict
 
 from GroundingDINO.demo.test_ap_on_coco import CocoDetection as GDINOCocoDetection
 from GroundingDINO.demo.test_ap_on_coco import PostProcessCocoGrounding as GDINOPostProcessCocoGrounding
@@ -25,6 +27,24 @@ COCO_DATASET_VAL = f"{COCO_DATASET_DIR}/val2017"
 COCO_DATASET_ANNOTATIONS = f"{COCO_DATASET_DIR}/annotations/instances_val2017.json"
 
 
+def load_model(precision, model_config_path, model_checkpoint_path):
+    # The First option is the baseline option
+    cfg_args = gdino_SLConfig.fromfile(model_config_path)
+    cfg_args.device = configs.GPU_DEVICE
+    model = gdino_build_model(cfg_args)
+    checkpoint = torch.load(model_checkpoint_path, map_location=configs.GPU_DEVICE)
+    model.load_state_dict(gdino_clean_state_dict(checkpoint["model"]), strict=False)
+    model.eval()
+    # Disable also parameter grads
+    model.zero_grad(set_to_none=True)
+    model = model.to(configs.GPU_DEVICE)
+
+    if precision == configs.FP16:
+        model = model.half()
+
+    return cfg_args.text_encoder_type, model
+
+
 @torch.no_grad()
 def main():
     torch.set_grad_enabled(mode=False)
@@ -33,9 +53,9 @@ def main():
 
     print("Creating model")
     text_encoder_type, model = load_model(
-        model_checkpoint_path="/home/carol/vitsreliability/data/weights_grouding_dino/groundingdino_swint_ogc.pth",
-        model_config_path="/home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-        hardened_model=False, torch_compile=False, precision="fp32", model_name=configs.GROUNDING_DINO_SWINT_OGC
+        model_checkpoint_path="/home/carol/vitsreliability/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
+        model_config_path="/home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
+        precision="fp32"
     )
     replace_identity(module=model, profile_or_inference="profile")
     print("Model created, creating the test loader")

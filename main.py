@@ -1,11 +1,20 @@
 #!/usr/bin/python3
 import argparse
-from typing import Tuple, List
+import logging
 
+import torch
+import os
+import console_logger
 import configs
+
+from typing import Union
+
 import dnn_log_helper
-from setup_grounding_dino import run_setup_grounding_dino
-from setup_selective_ecc import run_setup_selective_ecc
+
+from setup_grounding_dino import SetupGroundingDINO
+from setup_selective_ecc import SetupSelectiveECC
+
+import common
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,7 +41,13 @@ def parse_args() -> argparse.Namespace:
                         required=True, default=configs.FP32)
 
     parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
-                        type=str, required=False, default="coco_classes")
+                        type=str, required=False, default='')
+
+    parser.add_argument('--floatthreshold', help="Float value threshold to consider a failure",
+                        type=float, required=True, default=1e-3)
+
+    parser.add_argument('--loghelperinterval', help="LogHelper interval of iteration logging",
+                        type=int, required=True, default=1)
 
     parser.add_argument('--model', help="Model name", choices=configs.ALL_POSSIBLE_MODELS, type=str, required=True)
 
@@ -51,17 +66,96 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+@torch.no_grad()
+def run_setup(
+        args: argparse.Namespace,
+        setup_object: Union[SetupGroundingDINO, SetupSelectiveECC],
+        terminal_logger: logging.Logger
+):
+    args_dict = vars(args)
+    log_args = dict(framework_name="PyTorch", torch_version=torch.__version__, gpu=torch.cuda.get_device_name(),
+                    activate_logging=not args.generate, **args_dict)
+    dnn_log_helper.start_setup_log_file(**log_args)
+
+    # Check if a device is ok and disable grad
+    common.check_and_setup_gpu()
+
+    # Defining a timer
+    timer = common.Timer()
+    # Load if it is not a gold generating op
+    timer.tic()
+    setup_object.load_data_at_test()
+    timer.toc()
+    golden_load_diff_time = timer.diff_time_str
+
+    if terminal_logger:
+        terminal_logger.debug("\n".join(f"{k}:{v}" for k, v in args_dict.items()))
+        terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
+
+    # Main setup loop
+    setup_iteration = 0
+    while setup_iteration < args.iterations:
+        # Loop over the input list
+        batch_id = 0  # It must be like this, because I may reload the list in the middle of the process
+        while batch_id < setup_object.num_batches:
+            timer.tic()
+            dnn_log_helper.start_iteration()
+            dnn_output = setup_object(batch_id=batch_id)
+            torch.cuda.synchronize(device=configs.GPU_DEVICE)
+            dnn_log_helper.end_iteration()
+            timer.toc()
+            kernel_time = timer.diff_time
+            # Always copy to CPU
+            timer.tic()
+            dnn_output_cpu = setup_object.copy_to_cpu(dnn_output=dnn_output)
+            timer.toc()
+            copy_to_cpu_time = timer.diff_time
+            # Then compare the golden with the output
+            timer.tic()
+            # If generate errors==0, otherwise it will compare the output
+            errors = setup_object.post_inference_process(dnn_output_cpu=dnn_output_cpu, batch_id=batch_id)
+            timer.toc()
+            comparison_time = timer.diff_time
+
+            # Reload all the memories after error
+            if errors != 0:
+                setup_object.clear_gpu_memory_and_reload()
+
+            # Printing timing information
+            setup_object.print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time,
+                                               copy_to_cpu_time=copy_to_cpu_time,
+                                               errors=errors, kernel_time=kernel_time,
+                                               setup_iteration=setup_iteration)
+            batch_id += 1
+        setup_iteration += 1
+
+    if args.generate is True:
+        setup_object.save_setup_data_to_gold_file()
+        setup_object.check_dnn_accuracy()
+
+    if terminal_logger:
+        terminal_logger.debug("Finish computation.")
+
+    dnn_log_helper.end_log_file()
+
+
 def main():
     args = parse_args()
+    # Terminal console
+    main_logger_name = str(os.path.basename(__file__)).replace(".py", "")
+    terminal_logger = console_logger.ColoredLogger(main_logger_name) if args.disableconsolelog is False else None
 
+    setup_object = None
     if args.setup_type == configs.GROUNDING_DINO:
-        run_setup_grounding_dino(args=args)
+        setup_object = SetupGroundingDINO(args=args, output_logger=terminal_logger)
     elif args.setup_type == configs.MAXIMALS:
         pass
     elif args.setup_type == configs.SELECTIVE_ECC:
-        run_setup_selective_ecc(args=args)
+        pass
     else:
         dnn_log_helper.log_and_crash(fatal_string=f"Code type {args.code_type} not implemented")
+
+    run_setup(args=args, setup_object=setup_object, terminal_logger=terminal_logger)
 
 
 if __name__ == '__main__':

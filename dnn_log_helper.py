@@ -17,10 +17,10 @@ def start_setup_log_file(activate_logging: bool, **kwargs) -> None:
     __LOGGING_ACTIVE = activate_logging
     if __LOGGING_ACTIVE:
         dnn_name = kwargs.get("model")
+        interval_print = kwargs.get("loghelperinterval")
         log_helper.start_log_file(dnn_name, " ".join({f"{k}:{v}" for k, v in kwargs.items()}))
         log_helper.set_max_errors_iter(configs.MAXIMUM_ERRORS_PER_ITERATION)
         log_helper.set_max_infos_iter(configs.MAXIMUM_INFOS_PER_ITERATION)
-        interval_print = configs.ITERATION_INTERVAL_LOG_HELPER_PRINT[dnn_name]
         log_helper.set_iter_interval_print(interval_print)
 
 
