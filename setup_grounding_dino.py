@@ -28,10 +28,6 @@ class SetupGroundingDINO(SetupBase):
     def __init__(self, args: argparse.Namespace, output_logger: logging.Logger):
         super().__init__(args=args, output_logger=output_logger)
         self.text_encoder_type = ""
-        self.model = None
-        self.golden = list()
-        self.input_list = list()
-        self.gt_targets = list()
         self.coco_api = None
         self.correctness_threshold = 0.6  # Based on the whole dataset accuracy. Used only for golden generate part
 
@@ -40,10 +36,6 @@ class SetupGroundingDINO(SetupBase):
 
         if self.precision != configs.FP32:
             raise NotImplementedError("Precisions different than FP32 are not available for now")
-
-    @property
-    def num_batches(self):
-        return len(self.input_list)
 
     def __call__(self, batch_id, **kwargs):
         return self.model(self.input_list[batch_id], captions=self.input_captions)
@@ -82,8 +74,10 @@ class SetupGroundingDINO(SetupBase):
             ]
         )
         dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
+        self.selected_samples = list(range(self.test_sample))
+        subset = torch.utils.data.SequentialSampler(self.selected_samples)
         test_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=1,
-                                                  collate_fn=gdino_collate_fn)
+                                                  collate_fn=gdino_collate_fn, sampler=subset)
         self.coco_api = dataset.coco
 
         # build captions
@@ -103,8 +97,6 @@ class SetupGroundingDINO(SetupBase):
             # Only the inputs must be in the device
             self.input_list.append(inputs.to(configs.GPU_DEVICE))
             self.gt_targets.append(targets)
-            if i == self.test_sample:
-                break
 
     def get_coco_evaluator(self, predicted: list, targets: list) -> GDINOCocoGroundingEvaluator:
         # build post processor
@@ -214,23 +206,14 @@ class SetupGroundingDINO(SetupBase):
             f=self.gold_path
         )
 
-    def clear_gpu_memory_and_reload(self):
-        if self.output_logger:
-            self.output_logger.info("RELOADING THE MODEL AND THE INPUTS AFTER ERROR")
-        del self.input_list
-        del self.model
-        # Free cuda memory
-        torch.cuda.empty_cache()
-        self.load_data_at_test()
-
     @staticmethod
     def copy_to_cpu(dnn_output):
         return {k: v.to(configs.CPU) for k, v in dnn_output.items()}
 
-    def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
-        errors = 0
-        if self.generate is False:
-            errors = self.compare_inference(output=dnn_output_cpu, batch_id=batch_id)
-        else:
-            self.golden.append(dnn_output_cpu)
-        return errors
+    # def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
+    #     errors = 0
+    #     if self.generate is False:
+    #         errors = self.compare_inference(output=dnn_output_cpu, batch_id=batch_id)
+    #     else:
+    #         self.golden.append(dnn_output_cpu)
+    #     return errors

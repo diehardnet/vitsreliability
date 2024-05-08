@@ -43,6 +43,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
                         type=str, required=False, default='')
 
+    parser.add_argument('--dataset', help="For some models it's necessary to specify the dataset",
+                        type=str, required=False, default=configs.IMAGENET, choices=configs.DATASETS)
+
     parser.add_argument('--floatthreshold', help="Float value threshold to consider a failure",
                         type=float, required=True, default=1e-3)
 
