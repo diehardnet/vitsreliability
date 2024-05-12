@@ -76,3 +76,9 @@ def check_and_setup_gpu() -> None:
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(configs.TORCH_SEED)
     torch.use_deterministic_algorithms(mode=True, warn_only=True)
+
+
+def get_top_k_labels_classification(input_tensor: torch.tensor, top_k: int, dim: int) -> torch.tensor:
+    # Apply softmax to get predicted probabilities for each class
+    probabilities = torch.nn.functional.softmax(input_tensor, dim=dim)
+    return torch.topk(probabilities, k=top_k, dim=dim).indices.squeeze(0)
