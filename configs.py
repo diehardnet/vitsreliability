@@ -132,10 +132,10 @@ TMP_CRASH_FILE = "/tmp/vitsreliability_crash_file.txt"
 TORCH_SEED = 0
 
 # code types that can be evaluated
-GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC = "grounding_dino", "maximals", "selective_ecc"
+GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS = "grounding_dino", "maximals", "selective_ecc", "vits"
 
 ALL_SETUP_TYPES = [
-    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC
+    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS
 ]
 
 FP32, FP16, BFLOAT16, INT8 = "fp32", "fp16", "bfloat16", "int8"

@@ -13,6 +13,7 @@ import dnn_log_helper
 
 from setup_grounding_dino import SetupGroundingDINO
 from setup_selective_ecc import SetupSelectiveECC
+from setup_vits import SetupVits
 
 import common
 
@@ -29,6 +30,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--checkpointpath', help="Path to checkpoint")
     parser.add_argument('--configpath', help="Path to configuration file")
     parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
+    # for ViTs
+    parser.add_argument('--timm', default=False, action="store_true", help='Use a timm model instead of model file')
     # Only for pytorch 2.0
     parser.add_argument('--usetorchcompile', default=False, action="store_true",
                         help="Disable or enable torch compile (GPU Arch >= 700)")
@@ -69,7 +72,7 @@ def parse_args() -> argparse.Namespace:
 @torch.no_grad()
 def run_setup(
         args: argparse.Namespace,
-        setup_object: Union[SetupGroundingDINO, SetupSelectiveECC],
+        setup_object: Union[SetupGroundingDINO, SetupSelectiveECC, SetupVits],
         terminal_logger: logging.Logger
 ):
     args_dict = vars(args)
@@ -152,6 +155,8 @@ def main():
         pass
     elif args.setup_type == configs.SELECTIVE_ECC:
         pass
+    elif args.setup_type == configs.VITS:
+        setup_object = SetupVits(args=args, output_logger=terminal_logger)
     else:
         dnn_log_helper.log_and_crash(fatal_string=f"Code type {args.code_type} not implemented")
 
