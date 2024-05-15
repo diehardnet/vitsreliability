@@ -9,12 +9,18 @@ import configs
 
 from typing import Union
 
-import dnn_log_helper
+import sys
 
+sys.path.extend([
+    "/home/carol/vitsreliability/GroundingDINO",
+    "/home/carol/vitsreliability",
+    "/home/carol/libLogHelper/build",
+])
+
+import dnn_log_helper
+import common
 from setup_grounding_dino import SetupGroundingDINO
 from setup_selective_ecc import SetupSelectiveECC
-
-import common
 
 
 def parse_args() -> argparse.Namespace:
