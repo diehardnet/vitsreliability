@@ -36,10 +36,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--checkpointpath', help="Path to checkpoint")
     parser.add_argument('--configpath', help="Path to configuration file")
     parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
-    # for ViTs
-    vit_config_group = parser.add_mutually_exclusive_group()
-    vit_config_group.add_argument("--fp16", action="store_true", help="Set this flag to use half precision")
-    vit_config_group.add_argument("--ptq4vit", action="store_true", help="Set this flag to use PTQ4ViT model", choices=configs.PTQ4VIT_MODELS, type=str)
     # Only for pytorch 2.0
     parser.add_argument('--usetorchcompile', default=False, action="store_true",
                         help="Disable or enable torch compile (GPU Arch >= 700)")
