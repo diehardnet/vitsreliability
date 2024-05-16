@@ -209,28 +209,30 @@ class SetupBaseClassification(SetupBase):
 class SetupBaseImageNet(SetupBaseClassification):
     transforms: tv_transforms.Compose = None
 
-    imagenet_validation_size = 5000
-
     def load_dataset(self) -> None:
         if self.transforms is None:
             raise ValueError("First you have to set the set of transforms")
 
         if self.output_logger:
             self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
+
+        # Set a sampler on the CPU
+        sampler_generator = torch.Generator(device=configs.CPU)
+        sampler_generator.manual_seed(configs.TORCH_SEED)
+
         test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
                                                  split='val')
-        
-        subset = torch.utils.data.SequentialSampler(data_source=test_set)
+        subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
+                                                generator=sampler_generator)
         test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
                                                   shuffle=False, pin_memory=True)
-        self.input_list, self.gt_targets = list(), list()
-        # This can take some time
-        self.selected_samples = random.sample(range(self.imagenet_validation_size), self.test_sample)
+
+        # TODO: it is necessary to save which images are being loaded
+        self.selected_samples = list()
         for i, (inputs, labels) in enumerate(test_loader):
             # Only the inputs must be in the device
-            if i in self.selected_samples:
-                self.input_list.append(inputs.to(configs.GPU_DEVICE))
-                self.gt_targets.append(labels)
+            self.input_list.append(inputs.to("cuda:0"))
+            self.gt_targets.append(labels)
 
 
 class SetupBaseCIFAR(SetupBaseClassification):
