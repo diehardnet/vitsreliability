@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
                         type=str, required=False, default=configs.IMAGENET, choices=configs.DATASETS)
 
     parser.add_argument('--floatthreshold', help="Float value threshold to consider a failure",
-                        type=float, required=True, default=1e-3)
+                        type=float, required=True)
 
     parser.add_argument('--loghelperinterval', help="LogHelper interval of iteration logging",
                         type=int, required=True, default=1)
@@ -158,10 +158,8 @@ def main():
     setup_object = None
     if args.setup_type == configs.GROUNDING_DINO:
         setup_object = SetupGroundingDINO(args=args, output_logger=terminal_logger)
-    elif args.setup_type == configs.MAXIMALS:
-        pass
     elif args.setup_type == configs.SELECTIVE_ECC:
-        pass
+        setup_object = SetupSelectiveECC(args=args, output_logger=terminal_logger)
     elif args.setup_type == configs.VITS:
         setup_object = SetupVits(args=args, output_logger=terminal_logger)
     else:
