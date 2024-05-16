@@ -53,18 +53,27 @@ SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_base_window12to16_192to256.m
 SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_base_window12to24_192to384.ms_in22k_ft_in1k'
 SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_large_window12to16_192to256.ms_in22k_ft_in1k'
 SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384.ms_in22k_ft_in1k'
+## PTQ4VIT Swin models
+SWIN_BASE_PATCH4_WINDOW12_384 = "swin_base_patch4_window12_384"
+SWIN_BASE_PATCH4_WINDOW7_224 = "swin_base_patch4_window7_224"
 
 # EVA
 # https://huggingface.co/timm/eva02_large_patch14_448.mim_m38m_ft_in1k
 EVA_LARGE_PATCH14_448_MIM = "eva02_large_patch14_448.mim_in22k_ft_in22k_in1k"
 EVA_BASE_PATCH14_448_MIM = "eva02_base_patch14_448.mim_in22k_ft_in22k_in1k"
-EVA_SMALL_PATCH14_448_MIN = "eva02_small_patch14_336.mim_in22k_ft_in1k"
+EVA_SMALL_PATCH14_336_MIN = "eva02_small_patch14_336.mim_in22k_ft_in1k"
 
 # Efficient former
 # https://huggingface.co/timm/efficientformer_l1.snap_dist_in1k
 EFFICIENTFORMER_L1 = "efficientformer_l1.snap_dist_in1k"
 EFFICIENTFORMER_L3 = "efficientformer_l3.snap_dist_in1k"
 EFFICIENTFORMER_L7 = "efficientformer_l7.snap_dist_in1k"
+
+# DeiT models
+# https://huggingface.co/timm/deit_base_patch16_224
+# https://huggingface.co/timm/deit_base_patch16_384
+DEIT_BASE_PATCH16_224 = "deit_base_patch16_224"
+DEIT_BASE_PATCH16_384 = "deit_base_patch16_384"
 
 VIT_CLASSIFICATION_CONFIGS = [
     VIT_BASE_PATCH16_224,
@@ -84,10 +93,23 @@ VIT_CLASSIFICATION_CONFIGS = [
     SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K,
     EVA_LARGE_PATCH14_448_MIM,
     EVA_BASE_PATCH14_448_MIM,
-    EVA_SMALL_PATCH14_448_MIN,
+    EVA_SMALL_PATCH14_336_MIN,
     # EFFICIENTFORMER_L1,        --> Hardening not ready
     # EFFICIENTFORMER_L3,        --> Hardening not ready
     # EFFICIENTFORMER_L7         --> Hardening not ready
+    SWIN_BASE_PATCH4_WINDOW12_384,
+    SWIN_BASE_PATCH4_WINDOW7_224,
+    DEIT_BASE_PATCH16_224,
+    DEIT_BASE_PATCH16_384,
+]
+
+PTQ4VIT_MODELS = [
+    SWIN_BASE_PATCH4_WINDOW12_384,
+    SWIN_BASE_PATCH4_WINDOW7_224,
+    VIT_BASE_PATCH16_224,
+    VIT_BASE_PATCH16_384,
+    DEIT_BASE_PATCH16_224,
+    DEIT_BASE_PATCH16_384,
 ]
 
 GROUNDING_DINO_SWINT_OGC = "groundingdino_swint_ogc"
@@ -120,6 +142,9 @@ IMAGENET_DATASET_DIR = "/home/ILSVRC2012"
 COCO_DATASET_DIR = "/home/COCO"
 COCO_DATASET_VAL = f"{COCO_DATASET_DIR}/val2017"
 COCO_DATASET_ANNOTATIONS = f"{COCO_DATASET_DIR}/annotations/instances_val2017.json"
+
+# Checkpoints directory
+PTQ4VIT_MODELS_DIR = "/home/PTQ4ViT/models"
 
 # File to save last status of the benchmark when log helper not active
 TMP_CRASH_FILE = "/tmp/vitsreliability_crash_file.txt"
