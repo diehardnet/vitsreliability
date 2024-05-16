@@ -219,9 +219,8 @@ class SetupBaseImageNet(SetupBaseClassification):
             self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
         test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
                                                  split='val')
-
-        subset = torch.utils.data.SequentialSampler(data_source=test_set, replacement=False,
-                                                    num_samples=self.test_sample)
+        
+        subset = torch.utils.data.SequentialSampler(data_source=test_set)
         test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
                                                   shuffle=False, pin_memory=True)
         self.input_list, self.gt_targets = list(), list()
