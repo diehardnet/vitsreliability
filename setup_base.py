@@ -29,6 +29,7 @@ class SetupBase:
         self.input_captions = args.textprompt
         self.float_threshold = args.floatthreshold
         self.dataset = args.dataset
+        self.iterations = args.iterations
 
         # default attributes
         self.correctness_threshold = 0.7  # Based on the whole dataset accuracy. Used only for golden generate part
@@ -37,18 +38,24 @@ class SetupBase:
         self.input_list = list()
         self.gt_targets = list()
         self.selected_samples = None
+        self.current_iteration = 0
 
     @property
     def num_batches(self):
         return len(self.input_list)
 
+    @property
+    def is_setup_active(self):
+        self.current_iteration += 1
+        return self.current_iteration <= self.iterations
+
     def print_setup_iteration(self,
                               batch_id: Union[int, None], comparison_time: float, copy_to_cpu_time: float,
-                              errors: int, kernel_time: float, setup_iteration: int) -> None:
+                              errors: int, kernel_time: float) -> None:
         if self.output_logger:
             wasted_time = comparison_time + copy_to_cpu_time
             time_pct = (wasted_time / (wasted_time + kernel_time)) * 100.0
-            iteration_out = f"It:{setup_iteration:<3} batch_id:{batch_id:<3} inference time:{kernel_time:.5f}, "
+            iteration_out = f"It:{self.current_iteration:<3} batch_id:{batch_id:<3} inference time:{kernel_time:.5f}, "
             iteration_out += f"compare time:{comparison_time:.5f} copy time:{copy_to_cpu_time:.5f} "
             iteration_out += f"(wasted:{time_pct:.1f}%) errors:{errors}"
             self.output_logger.debug(iteration_out)

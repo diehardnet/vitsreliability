@@ -6,9 +6,6 @@ import torch
 import os
 import console_logger
 import configs
-
-from typing import Union
-
 import sys
 
 sys.path.extend([
@@ -19,9 +16,7 @@ sys.path.extend([
 
 import dnn_log_helper
 import common
-from setup_grounding_dino import SetupGroundingDINO
-from setup_selective_ecc import SetupSelectiveECC
-from setup_vits import SetupVits
+from setup_base import SetupBase
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,7 +74,7 @@ def parse_args() -> argparse.Namespace:
 @torch.no_grad()
 def run_setup(
         args: argparse.Namespace,
-        setup_object: Union[SetupGroundingDINO, SetupSelectiveECC, SetupVits],
+        setup_object: SetupBase,
         terminal_logger: logging.Logger
 ):
     args_dict = vars(args)
@@ -103,8 +98,7 @@ def run_setup(
         terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
 
     # Main setup loop
-    setup_iteration = 0
-    while setup_iteration < args.iterations:
+    while setup_object.is_setup_active:
         # Loop over the input list
         batch_id = 0  # It must be like this, because I may reload the list in the middle of the process
         while batch_id < setup_object.num_batches:
@@ -133,13 +127,11 @@ def run_setup(
 
             # Printing timing information
             setup_object.print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time,
-                                               copy_to_cpu_time=copy_to_cpu_time,
-                                               errors=errors, kernel_time=kernel_time,
-                                               setup_iteration=setup_iteration)
+                                               copy_to_cpu_time=copy_to_cpu_time, errors=errors,
+                                               kernel_time=kernel_time)
             batch_id += 1
-        setup_iteration += 1
 
-    if args.generate is True:
+    if setup_object.generate:
         setup_object.save_setup_data_to_gold_file()
         setup_object.check_dnn_accuracy()
 
@@ -157,11 +149,17 @@ def main():
 
     setup_object = None
     if args.setup_type == configs.GROUNDING_DINO:
+        from setup_grounding_dino import SetupGroundingDINO
         setup_object = SetupGroundingDINO(args=args, output_logger=terminal_logger)
     elif args.setup_type == configs.SELECTIVE_ECC:
+        from setup_selective_ecc import SetupSelectiveECC
         setup_object = SetupSelectiveECC(args=args, output_logger=terminal_logger)
     elif args.setup_type == configs.VITS:
+        from setup_vits import SetupVits
         setup_object = SetupVits(args=args, output_logger=terminal_logger)
+    elif args.setup_type == configs.MICROBENCHMARK:
+        from setup_microbenchmarks import SetupViTMicroBenchmarks
+        setup_object = SetupViTMicroBenchmarks(args=args, output_logger=terminal_logger)
     else:
         dnn_log_helper.log_and_crash(fatal_string=f"Code type {args.code_type} not implemented")
 
