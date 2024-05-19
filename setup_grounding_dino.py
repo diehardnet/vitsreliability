@@ -1,7 +1,10 @@
 import argparse
 import logging
-from typing import Union
+import os
+import re
+import pathlib
 
+import numpy
 import torch
 
 from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
@@ -25,17 +28,26 @@ from setup_base import SetupBase
 
 
 class SetupGroundingDINO(SetupBase):
+
     def __init__(self, args: argparse.Namespace, output_logger: logging.Logger):
         super().__init__(args=args, output_logger=output_logger)
+        # threshold (10%) to be considered critical, mAP * self.coco_metrics_threshold <= original inference
+        self.coco_metrics_threshold = 0.9
         self.text_encoder_type = ""
         self.coco_api = None
         self.correctness_threshold = 0.6  # Based on the whole dataset accuracy. Used only for golden generate part
-
+        self.map_list = list()
         if args.batchsize != 1:
             raise NotImplementedError("For now, the only batch size allowed is 1")
 
         if self.precision != configs.FP32:
             raise NotImplementedError("Precisions different than FP32 are not available for now")
+
+        self.logits_path = os.path.join(pathlib.Path.home(), "grounding_dino_logits")
+        if self.save_logits:
+            if self.output_logger:
+                self.output_logger.debug(f"Save logits enabled, creating {self.logits_path}")
+            pathlib.Path(self.logits_path).mkdir(parents=True, exist_ok=True)
 
     def __call__(self, batch_id, **kwargs):
         return self.model(self.input_list[batch_id], captions=self.input_captions)
@@ -55,13 +67,6 @@ class SetupGroundingDINO(SetupBase):
         if self.hardened_model:
             hardened_identity.replace_identity(module=self.model, profile_or_inference="inference",
                                                model_name=self.model_name)
-        # TODO: Implement when the serialization is possible
-        if self.torch_compile is True:
-            # model = torch.compile(model=model, mode="max-autotune")
-            dnn_log_helper.log_and_crash(
-                fatal_string="Up to now it's not possible to serialize compiled models "
-                             "(github.com/pytorch/pytorch/issues/101107#issuecomment-1542688089)"
-            )
         self.text_encoder_type = cfg_args.text_encoder_type
 
     def load_dataset(self) -> None:
@@ -114,13 +119,12 @@ class SetupGroundingDINO(SetupBase):
         evaluator.summarize()
         return evaluator
 
-    def get_iou_for_single_image_at_test(self, output: dict, batch_id) -> [list, list]:
+    def get_iou_for_single_image_at_test(self, output: dict, batch_id) -> numpy.ndarray:
         evaluator = self.get_coco_evaluator(predicted=[output], targets=[self.gt_targets[batch_id]])
         bbox_stats = evaluator.coco_eval["bbox"].stats
         if bbox_stats.size != 12:
             raise ValueError(f"Incorrect size of stats array: {bbox_stats.size()}")
-        precision, recall = bbox_stats[:6].tolist(), bbox_stats[6:].tolist()
-        return precision, recall
+        return bbox_stats
 
     def check_dnn_accuracy(self) -> None:
         evaluator = self.get_coco_evaluator(predicted=self.golden, targets=self.gt_targets)
@@ -132,12 +136,23 @@ class SetupGroundingDINO(SetupBase):
             if correctness < self.correctness_threshold:
                 dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY: {correctness * 100.0}%")
 
+    def _save_logits(self, output, batch_id):
+        if self.save_logits:
+            log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+            save_file = f"{os.path.basename(log_helper_file)}_{batch_id}_it_{self.current_iteration}.pt"
+            save_file = os.path.join(self.logits_path, save_file)
+            if self.output_logger:
+                self.output_logger.debug(f"Saving logits at:{save_file}")
+            dnn_log_helper.log_info_detail(info_detail=f"LOGITS_AT:{save_file}")
+            torch.save(output, save_file)
+
     def compare_inference(self, output: dict, batch_id) -> int:
-        # global TEST
-        # TEST += 1
-        # if TEST == 3:
-        #     output["pred_logits"][0, 3] = 39304
+        # if self.current_iteration == 8:
+        #     output["pred_logits"] *= 0
+
         golden_dict = self.golden[batch_id]
+        golden_metrics = self.map_list[batch_id]
+
         # Make sure that they are on CPU
         for out_or_gold, dict_data in [("out", output), ("gold", golden_dict)]:
             for tensor_type, tensor in dict_data.items():
@@ -155,20 +170,32 @@ class SetupGroundingDINO(SetupBase):
         else:
             return 0
 
-        output_errors = 1
         # ------------ Check if there is a Critical error ----------------------------------------------------------
-        precision, recall = self.get_iou_for_single_image_at_test(output=output, batch_id=batch_id)
-        precision = ";".join(f"{v:.6e}" for v in precision)
-        recall = ";".join(f"{v:.6e}" for v in recall)
-        err_string = f"batch:{batch_id} gd_pre:{precision} gd_rec:{recall}"
+        current_map = self.get_iou_for_single_image_at_test(output=output, batch_id=batch_id)
+        # The original map/mar coco, 0.5:0.95
+        map_curr, mar_curr = current_map[0], current_map[6]
+        map_gold = golden_metrics[0] * self.coco_metrics_threshold
+        mar_gold = golden_metrics[6] * self.coco_metrics_threshold
+        critical_or_not = "tolerable"
+        if map_curr <= map_gold or mar_curr <= mar_gold:
+            critical_or_not = "critical"
+            self._save_logits(output=output, batch_id=batch_id)
+
+        precision_str = ";".join(f"{v:.4e}" for v in current_map[:6])
+        recall_str = ";".join(f"{v:.4e}" for v in current_map[6:])
+
+        err_string = f"{critical_or_not} batch:{batch_id} gd_pre:{precision_str} gd_rec:{recall_str}"
 
         if self.output_logger:
             self.output_logger.error(err_string)
         dnn_log_helper.log_error_detail(err_string)
         # # ------------ Check error on the whole output -------------------------------------------------------------
         # Not necessary to save everything, only the good info
+        output_errors = 1
         for (out_tensor_type, output_tensor), (gld_tensor_type, golden_tensor) in zip(output.items(),
                                                                                       golden_dict.items()):
+            output_errors += common.count_errors(lhs=output_tensor, rhs=golden_tensor)
+
             # Data on output tensor
             has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output_tensor)
             error_detail_out = f"{out_tensor_type} output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
@@ -190,8 +217,8 @@ class SetupGroundingDINO(SetupBase):
         # This will save time
         if self.generate is False:
             # Save everything in the same list
-            [self.golden, self.input_list, self.gt_targets,
-             self.model, self.input_captions, self.text_encoder_type, self.coco_api] = torch.load(self.gold_path)
+            [self.golden, self.input_list, self.gt_targets, self.model, self.input_captions, self.text_encoder_type,
+             self.coco_api, self.map_list] = torch.load(self.gold_path)
         else:
             # The First step is to load the inputs in the memory
             # Load the model
@@ -202,7 +229,7 @@ class SetupGroundingDINO(SetupBase):
     def save_setup_data_to_gold_file(self):
         torch.save(
             obj=[self.golden, self.input_list, self.gt_targets,
-                 self.model, self.input_captions, self.text_encoder_type, self.coco_api],
+                 self.model, self.input_captions, self.text_encoder_type, self.coco_api, self.map_list],
             f=self.gold_path
         )
 
@@ -210,10 +237,12 @@ class SetupGroundingDINO(SetupBase):
     def copy_to_cpu(dnn_output):
         return {k: v.to(configs.CPU) for k, v in dnn_output.items()}
 
-    # def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
-    #     errors = 0
-    #     if self.generate is False:
-    #         errors = self.compare_inference(output=dnn_output_cpu, batch_id=batch_id)
-    #     else:
-    #         self.golden.append(dnn_output_cpu)
-    #     return errors
+    def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
+        errors = 0
+        if self.generate is False:
+            errors = self.compare_inference(output=dnn_output_cpu, batch_id=batch_id)
+        else:
+            self.golden.append(dnn_output_cpu)
+            self.map_list.append(self.get_iou_for_single_image_at_test(output=dnn_output_cpu, batch_id=batch_id))
+
+        return errors

@@ -7,21 +7,22 @@ DATA_DIR = $(SETUP_PATH)/data
 #CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swinb_cogcoor.pth
 
 # GroundingDINO-T
-#MODEL_NAME = groundingdino_swinb_cogcoor
-#CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
-#CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swint_ogc.pth
+MODEL_NAME = groundingdino_swinb_cogcoor
+CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
+CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swint_ogc.pth
 
-MODEL_NAME = vit_base_patch16_224
-CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py
-CHECKPOINT_PATH = $(DATA_DIR)
+#MODEL_NAME = vit_base_patch16_224
+#CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py
+#CHECKPOINT_PATH = $(DATA_DIR)
 
 CHECKPOINTS = $(DATA_DIR)/checkpoints
-BATCH_SIZE = 4
+BATCH_SIZE = 1
 TEST_SAMPLES=4
 ITERATIONS=1
 PRECISION = fp32
 FLOAT_THRESHOLD = 1e-3
-SETUP_TYPE = microbenchmark
+#SETUP_TYPE = microbenchmark
+SETUP_TYPE = grounding_dino
 MICRO_TYPE = Attention
 
 ENV_VARS = CUBLAS_WORKSPACE_CONFIG=:4096:8
@@ -32,7 +33,12 @@ GOLD_PATH = $(DATA_DIR)/$(MODEL_NAME).pt
 ENABLE_MAXIMALS=0
 
 ifeq ($(ENABLE_MAXIMALS), 1)
-ADDARGS= --hardenedid
+ADDARGS = --hardenedid
+endif
+
+SAVE_LOGITS = 1
+ifeq ($(SAVE_LOGITS), 1)
+ADDARGS += --savelogits
 endif
 
 all: generate test

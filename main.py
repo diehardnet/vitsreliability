@@ -31,9 +31,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--checkpointpath', help="Path to checkpoint")
     parser.add_argument('--configpath', help="Path to configuration file")
     parser.add_argument('--batchsize', type=int, help="Batch size to be used.", default=1)
-    # Only for pytorch 2.0
-    parser.add_argument('--usetorchcompile', default=False, action="store_true",
-                        help="Disable or enable torch compile (GPU Arch >= 700)")
     parser.add_argument('--hardenedid', default=False, action="store_true",
                         help="Disable or enable HardenedIdentity. Work only for the profiled models.")
 
@@ -41,6 +38,9 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--microop', help="Which micro bench is to be tested", choices=configs.MICROBENCHMARK_MODULES,
                         type=str, required=False)
+
+    parser.add_argument('--savelogits', help="To save the DNN output into a file",
+                        default=False, action="store_true", required=False)
 
     parser.add_argument('--precision', help="Float precision", choices=configs.ALLOWED_MODEL_PRECISIONS, type=str,
                         required=True, default=configs.FP32)
@@ -67,9 +67,6 @@ def parse_args() -> argparse.Namespace:
     # Check if it is only to generate the gold values
     if args.generate is True:
         args.iterations = 1
-
-    if args.usetorchcompile is True:
-        dnn_log_helper.log_and_crash(fatal_string="Torch compile is not savable yet.")
 
     return args
 

@@ -19,7 +19,6 @@ class SetupBase:
         self.model_checkpoint_path = args.checkpointpath
         self.model_config_path = args.configpath
         self.hardened_model = args.hardenedid
-        self.torch_compile = args.usetorchcompile
         self.precision = args.precision
         self.model_name = args.model
         self.batch_size = args.batchsize
@@ -30,6 +29,7 @@ class SetupBase:
         self.float_threshold = args.floatthreshold
         self.dataset = args.dataset
         self.iterations = args.iterations
+        self.save_logits = args.savelogits
 
         # default attributes
         self.correctness_threshold = 0.7  # Based on the whole dataset accuracy. Used only for golden generate part
