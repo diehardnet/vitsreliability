@@ -39,6 +39,9 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--setup_type', help="Setup type", choices=configs.ALL_SETUP_TYPES, type=str, required=True)
 
+    parser.add_argument('--microop', help="Which micro bench is to be tested", choices=configs.MICROBENCHMARK_MODULES,
+                        type=str, required=False)
+
     parser.add_argument('--precision', help="Float precision", choices=configs.ALLOWED_MODEL_PRECISIONS, type=str,
                         required=True, default=configs.FP32)
 
