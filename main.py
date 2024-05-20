@@ -10,6 +10,7 @@ import sys
 
 sys.path.extend([
     "/home/carol/vitsreliability/GroundingDINO",
+    "/home/carol/vitsreliability/FasterTransformer",
     "/home/carol/vitsreliability",
     "/home/carol/libLogHelper/build",
 ])
@@ -45,6 +46,10 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--precision', help="Float precision", choices=configs.ALLOWED_MODEL_PRECISIONS, type=str,
                         required=True, default=configs.FP32)
+    
+    # needed for FasterTransformer swin
+    parser.add_argument("--cfg", help="Swin Transformer config file", type=str, required=False, default="")
+    parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=0)
 
     parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
                         type=str, required=False, default='')
