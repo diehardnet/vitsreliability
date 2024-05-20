@@ -53,7 +53,7 @@ SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_base_window12to16_192to256.m
 SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_base_window12to24_192to384.ms_in22k_ft_in1k'
 SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_large_window12to16_192to256.ms_in22k_ft_in1k'
 SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384.ms_in22k_ft_in1k'
-# PTQ4VIT Swin models
+# FasterTransformer Swin models
 SWIN_BASE_PATCH4_WINDOW12_384 = "swin_base_patch4_window12_384"
 SWIN_BASE_PATCH4_WINDOW7_224 = "swin_base_patch4_window7_224"
 

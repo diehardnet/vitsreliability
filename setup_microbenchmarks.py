@@ -91,6 +91,7 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
         pass  # This does nothing as it's only micro benchmarks
 
     def __get_error_geometry(self, output_tensor: torch.tensor) -> geometry_parser.ErrorGeometry:
+        # FIXME: The geometry is not always correct
         geometry_type = geometry_parser.ErrorGeometry.MASKED
         golden_cpu = self.golden.to(configs.CPU)
         output_cpu = output_tensor.to(configs.CPU)
@@ -130,9 +131,9 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
             dnn_log_helper.log_error_detail(error_detail=error_detail_out)
 
             # Dump the file
-            log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
-            save_file = f"{log_helper_file}_sdcit_{self.current_iteration}.pt"
-            torch.save(output, save_file)
+            # log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+            # save_file = f"{log_helper_file}_sdcit_{self.current_iteration}.pt"
+            # torch.save(output, save_file)
             dnn_log_helper.log_error_count(output_errors)
 
         return output_errors
