@@ -2,17 +2,30 @@ SETUP_PATH = /home/carol/vitsreliability
 DATA_DIR = $(SETUP_PATH)/data
 
 # GroundingDINO-B
-MODEL_NAME = groundingdino_swinb_cogcoor
-CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py
-CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swinb_cogcoor.pth
+#MODEL_NAME = groundingdino_swinb_cogcoor
+#CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py
+#CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swinb_cogcoor.pth
 
 # GroundingDINO-T
-#MODEL_NAME = groundingdino_swinb_cogcoor
-#CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
-#CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swint_ogc.pth
+MODEL_NAME = groundingdino_swinb_cogcoor
+CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py
+CHECKPOINT_PATH = $(DATA_DIR)/weights_grounding_dino/groundingdino_swint_ogc.pth
 
+#MODEL_NAME = vit_base_patch16_224
+#CFG_PATH = /home/carol/vitsreliability/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py
+#CHECKPOINT_PATH = $(DATA_DIR)
 
 CHECKPOINTS = $(DATA_DIR)/checkpoints
+BATCH_SIZE = 1
+TEST_SAMPLES=4
+ITERATIONS=1
+PRECISION = fp32
+FLOAT_THRESHOLD = 1e-3
+#SETUP_TYPE = microbenchmark
+SETUP_TYPE = grounding_dino
+MICRO_TYPE = Attention
+
+ENV_VARS = CUBLAS_WORKSPACE_CONFIG=:4096:8
 
 TARGET = main.py
 GOLD_PATH = $(DATA_DIR)/$(MODEL_NAME).pt
@@ -20,47 +33,30 @@ GOLD_PATH = $(DATA_DIR)/$(MODEL_NAME).pt
 ENABLE_MAXIMALS=0
 
 ifeq ($(ENABLE_MAXIMALS), 1)
-ADDARGS= --hardenedid
+ADDARGS = --hardenedid
 endif
 
-all: test generate
+SAVE_LOGITS = 1
+ifeq ($(SAVE_LOGITS), 1)
+ADDARGS += --savelogits
+endif
 
-BATCH_SIZE = 1
-TEST_SAMPLES=8
-ITERATIONS=1
-PRECISION = fp32
-FLOAT_THRESHOLD = 1e-3
-
-ENV_VARS = PYTHONPATH=/home/carol/vitsreliability/GroundingDINO:${PYTHONPATH} CUBLAS_WORKSPACE_CONFIG=:4096:8
+all: generate test
 
 generate:
-	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
-                  --testsamples $(TEST_SAMPLES) \
-				  --goldpath $(GOLD_PATH) \
-				  --checkpointdir $(CHECKPOINTS) \
-				  --generate $(ADDARGS)
-
-test:
-	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) \
-                  --testsamples $(TEST_SAMPLES) \
-				  --goldpath $(GOLD_PATH) \
-				  --checkpointdir $(CHECKPOINTS) \
-              	  $(ADDARGS)
-
-generate_dino:
 	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
                 --testsamples $(TEST_SAMPLES)  --generate \
 				--goldpath $(GOLD_PATH) \
 				--checkpointpath $(CHECKPOINT_PATH) \
 				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \
-				--setup_type grounding_dino --model $(MODEL_NAME) \
-              	$(ADDARGS) --floatthreshold $(FLOAT_THRESHOLD) --loghelperinterval 1
+				--setup_type $(SETUP_TYPE) --model $(MODEL_NAME) \
+              	$(ADDARGS) --floatthreshold $(FLOAT_THRESHOLD) --loghelperinterval 1 --microop $(MICRO_TYPE)
 
-test_dino:
+test:
 	$(ENV_VARS) $(SETUP_PATH)/$(TARGET) --iterations $(ITERATIONS) --precision $(PRECISION) \
                 --testsamples $(TEST_SAMPLES) \
 				--goldpath $(GOLD_PATH) \
 				--checkpointpath $(CHECKPOINT_PATH) \
 				--configpath $(CFG_PATH) --batchsize $(BATCH_SIZE) \
-				--setup_type grounding_dino --model $(MODEL_NAME) \
-              	$(ADDARGS) --floatthreshold $(FLOAT_THRESHOLD)  --loghelperinterval 1
+				--setup_type $(SETUP_TYPE) --model $(MODEL_NAME) \
+              	$(ADDARGS) --floatthreshold $(FLOAT_THRESHOLD) --loghelperinterval 1 --microop $(MICRO_TYPE)

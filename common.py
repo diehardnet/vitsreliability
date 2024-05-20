@@ -24,7 +24,7 @@ class Timer:
     def __repr__(self): return str(self)
 
 
-def equal(rhs: torch.Tensor, lhs: torch.Tensor, threshold: Union[None, float]) -> bool:
+def equal(lhs: torch.Tensor, rhs: torch.Tensor, threshold: Union[None, float]) -> bool:
     """ Compare based or not in a threshold, if the threshold is none then it is equal comparison    """
     if threshold is not None:
         return bool(
@@ -39,18 +39,20 @@ def equal(rhs: torch.Tensor, lhs: torch.Tensor, threshold: Union[None, float]) -
     else:
         return bool(torch.equal(rhs, lhs))
 
+
 def count_errors(lhs: torch.Tensor, rhs: torch.Tensor, threshold: Union[None, float] = None) -> int:
     if threshold is not None:
         diff_tensor = torch.le(
-                        torch.abs(
-                            torch.subtract(lhs, rhs)
-                        ), threshold
-                    )
+            torch.abs(
+                torch.subtract(lhs, rhs)
+            ), threshold
+        )
     else:
         diff_tensor = torch.eq(lhs, rhs)
     num_differences = torch.sum(diff_tensor == False)
-    
+
     return num_differences.item()
+
 
 # function to count SDC/Crit SDC
 

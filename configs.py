@@ -53,7 +53,7 @@ SWINV2_BASE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_base_window12to16_192to256.m
 SWINV2_BASE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_base_window12to24_192to384.ms_in22k_ft_in1k'
 SWINV2_LARGE_WINDOW12TO16_192to256_22KFT1K = 'swinv2_large_window12to16_192to256.ms_in22k_ft_in1k'
 SWINV2_LARGE_WINDOW12TO24_192to384_22KFT1K = 'swinv2_large_window12to24_192to384.ms_in22k_ft_in1k'
-## PTQ4VIT Swin models
+# PTQ4VIT Swin models
 SWIN_BASE_PATCH4_WINDOW12_384 = "swin_base_patch4_window12_384"
 SWIN_BASE_PATCH4_WINDOW7_224 = "swin_base_patch4_window7_224"
 
@@ -116,12 +116,6 @@ VITS_MULTIMODAL_CONFIGS = [
 
 ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS + VITS_MULTIMODAL_CONFIGS
 
-# Set the supported goals
-CLASSIFICATION = "classify"
-SEGMENTATION = "segmentation"
-MICROBENCHMARK = "microbenchmark"
-MULTIMODAL = "multimodal"
-
 # This max size will determine the max number of images in all datasets
 DATASET_MAX_SIZE = 50000
 
@@ -149,9 +143,10 @@ TORCH_SEED = 0
 
 # code types that can be evaluated
 GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS = "grounding_dino", "maximals", "selective_ecc", "vits"
+MICROBENCHMARK = "microbenchmark"
 
 ALL_SETUP_TYPES = [
-    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS
+    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS, MICROBENCHMARK
 ]
 
 FP32, FP16, BFLOAT16, INT8 = "fp32", "fp16", "bfloat16", "int8"
@@ -159,5 +154,9 @@ FP32, FP16, BFLOAT16, INT8 = "fp32", "fp16", "bfloat16", "int8"
 ALLOWED_MODEL_PRECISIONS = [
     FP32, FP16, BFLOAT16, INT8
 ]
+
+# Micro benchmarks setup
+ATTENTION, BLOCK, MLP, WINDOW_ATTENTION = 'Attention', 'Block', 'Mlp', 'WindowAttention'
+MICROBENCHMARK_MODULES = [ATTENTION, BLOCK, MLP, WINDOW_ATTENTION]
 
 INT8_CKPT_DIR = "/home/int8_ckpts/"
