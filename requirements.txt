@@ -6,3 +6,17 @@ timm
 typing
 
 torchinfo
+opencv-python
+requests
+Pillow
+tqdm
+setuptools
+PyYAML
+transformers
+termcolor
+addict
+yapf
+supervision
+matplotlib
+pycocotools
+nvidia-ml-py

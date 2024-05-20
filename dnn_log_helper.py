@@ -3,11 +3,14 @@ This wrapper is only if you don't want to use libLogHelper
 """
 import inspect
 import sys
+import threading
 import traceback
 
 import log_helper
 
 import configs
+
+_LOCK = threading.Lock()
 
 __LOGGING_ACTIVE = False
 
@@ -26,32 +29,38 @@ def start_setup_log_file(activate_logging: bool, **kwargs) -> None:
 
 def start_iteration() -> None:
     if __LOGGING_ACTIVE:
-        log_helper.start_iteration()
+        with _LOCK:
+            log_helper.start_iteration()
 
 
 def end_iteration() -> None:
     if __LOGGING_ACTIVE:
-        log_helper.end_iteration()
+        with _LOCK:
+            log_helper.end_iteration()
 
 
 def end_log_file() -> None:
     if __LOGGING_ACTIVE:
-        log_helper.end_log_file()
+        with _LOCK:
+            log_helper.end_log_file()
 
 
 def log_info_detail(info_detail: str) -> None:
     if __LOGGING_ACTIVE:
-        log_helper.log_info_detail(info_detail)
+        with _LOCK:
+            log_helper.log_info_detail(info_detail)
 
 
 def log_error_detail(error_detail: str) -> None:
     if __LOGGING_ACTIVE:
-        log_helper.log_error_detail(error_detail)
+        with _LOCK:
+            log_helper.log_error_detail(error_detail)
 
 
 def log_error_count(error_count: int) -> None:
     if __LOGGING_ACTIVE:
-        log_helper.log_error_count(error_count)
+        with _LOCK:
+            log_helper.log_error_count(error_count)
 
 
 def __getattr__(name: str) -> str:

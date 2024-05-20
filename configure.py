@@ -10,7 +10,6 @@ from socket import gethostname
 
 import configs
 
-FLOAT_THRESHOLD = 1e-3
 ALL_DNNS = {
     # PATH TO CHECKPOINT, CONFIG FILE, PRECISIONS, SETUP_TYPE,
     # BATCH SIZE, TEST SAMPLES, hardening types, micro operation
@@ -24,6 +23,13 @@ ALL_DNNS = {
     ),
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
 }
+
+MICRO_SETUPS = {
+
+}
+
+LOG_NVML = False
+FLOAT_THRESHOLD = 1e-2
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
@@ -58,7 +64,8 @@ def configure():
         weights_file, config_file, precisions, setup_type, batch_size, test_samples, hardened = dnn_cfg
         for hardening in hardened:
             for float_precision in precisions:
-                configuration_name = f"{dnn_model}_{float_precision}_hardening_{hardening}_setup_{setup_type}"
+                configuration_name = (f"{dnn_model}_{float_precision}_{hardening}_"
+                                      f"{setup_type}_{test_samples}_{batch_size}")
                 json_file_name = f"{jsons_path}/{configuration_name}.json"
                 data_dir = f"{current_directory}/data"
                 gold_path = f"{data_dir}/{configuration_name}.pt"
@@ -73,14 +80,15 @@ def configure():
                     f"--checkpointpath {checkpoint_path}",
                     f"--goldpath {gold_path}",
                     f"--model {dnn_model}",
-                    f"--{hardening}" if hardening else '',
                     f"--configpath {config_path}",
                     f"--setup_type grounding_dino",
                     f"--floatthreshold {FLOAT_THRESHOLD}",
                     f"--loghelperinterval 1",
                     f"--precision {float_precision}",
                     f"--microop Attention",
+                    f"--{hardening}" if hardening else '',
                     f"--savelogits" if SAVE_LOGITS else '',
+                    f"--lognvml" if LOG_NVML else ''
                 ]
                 execute_parameters = parameters + ["--disableconsolelog"]
                 command_list = [{

@@ -17,6 +17,7 @@ sys.path.extend([
 import dnn_log_helper
 import common
 from setup_base import SetupBase
+from nvml_wrapper import NVMLWrapperThread
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,6 +58,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--loghelperinterval', help="LogHelper interval of iteration logging",
                         type=int, required=True, default=1)
 
+    parser.add_argument('--lognvml', help="Open a thread that will each second get data from NVML Lib",
+                        action="store_true", required=False)
+
     parser.add_argument('--model', help="Model name", choices=configs.ALL_POSSIBLE_MODELS, type=str, required=True)
 
     args = parser.parse_args()
@@ -81,6 +85,11 @@ def run_setup(
     log_args = dict(framework_name="PyTorch", torch_version=torch.__version__, gpu=torch.cuda.get_device_name(),
                     activate_logging=not args.generate, **args_dict)
     dnn_log_helper.start_setup_log_file(**log_args)
+
+    nvml_wrapper = None
+    if args.lognvml:
+        nvml_wrapper = NVMLWrapperThread()
+        nvml_wrapper.start()
 
     # Check if a device is ok and disable grad
     common.check_and_setup_gpu()
@@ -137,6 +146,9 @@ def run_setup(
 
     if terminal_logger:
         terminal_logger.debug("Finish computation.")
+
+    if args.lognvml:
+        nvml_wrapper.join()
 
     dnn_log_helper.end_log_file()
 
