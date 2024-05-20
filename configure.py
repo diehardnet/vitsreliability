@@ -10,25 +10,43 @@ from socket import gethostname
 
 import configs
 
-ALL_DNNS = {
-    # PATH TO CHECKPOINT, CONFIG FILE, PRECISIONS, SETUP_TYPE,
-    # BATCH SIZE, TEST SAMPLES, hardening types, micro operation
+CURRENT_DIR = os.getcwd()
+
+# CHECKPOINT, CFG FILE, PRECISIONS, SETUP_TYPE, BATCH SIZE, TEST SAMPLES, hardening types, micro op, log interval
+VITS_SETUPS = {
+    # The parameter micro op for ViTs is ignored
     configs.GROUNDING_DINO_SWINT_OGC: (
-        "groundingdino_swint_ogc.pth", "GroundingDINO_SwinT_OGC.py", [configs.FP32], configs.GROUNDING_DINO,
-        1, 8, {None, "hardenedid"}
+        configs.GROUNDING_DINO_SWINT_OGC,
+        f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
+        f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
+        [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
     ),
     configs.GROUNDING_DINO_SWINB_COGCOOR: (
-        "groundingdino_swinb_cogcoor.pth", "GroundingDINO_SwinB_cfg.py", [configs.FP32], configs.GROUNDING_DINO,
-        1, 8, {None, "hardenedid"}
+        configs.GROUNDING_DINO_SWINB_COGCOOR,
+        f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
+        f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
+        [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
     ),
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
 }
 
 MICRO_SETUPS = {
-
+    **{f"swin_{micro_op}": (
+        configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
+        4, 4, {None}, micro_op, 100
+    ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
+    **{f"vit_{micro_op}": (
+        configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
+        4, 4, {None}, micro_op, 100
+    ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
-LOG_NVML = False
+# Change for configure
+SETUPS = dict()
+# SETUPS.update(VITS_SETUPS)
+SETUPS.update(MICRO_SETUPS)
+
+LOG_NVML = True
 FLOAT_THRESHOLD = 1e-2
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
@@ -52,40 +70,40 @@ def general_configure():
     jsons_path = f"data/{hostname}_jsons"
     if os.path.isdir(jsons_path) is False:
         os.makedirs(jsons_path, exist_ok=True)
-    current_directory = os.getcwd()
-    return current_directory, home, jsons_path, server_ip
+    return home, jsons_path, server_ip
 
 
 def configure():
-    current_directory, home, jsons_path, server_ip = general_configure()
+    home, jsons_path, server_ip = general_configure()
     script_name = "main.py"
 
-    for dnn_model, dnn_cfg in ALL_DNNS.items():
-        weights_file, config_file, precisions, setup_type, batch_size, test_samples, hardened = dnn_cfg
+    for dnn_key, dnn_cfg in SETUPS.items():
+        (dnn, weights_file, config_file, precisions, setup_type,
+         batch_size, test_samples, hardened, micro_op, log_interval) = dnn_cfg
         for hardening in hardened:
             for float_precision in precisions:
-                configuration_name = (f"{dnn_model}_{float_precision}_{hardening}_"
-                                      f"{setup_type}_{test_samples}_{batch_size}")
+                configuration_name = f"{dnn}_{float_precision}_{hardening}_"
+                configuration_name += f"{setup_type}_{test_samples}_{batch_size}"
+                if dnn != dnn_key:
+                    configuration_name = f"{dnn_key}_{configuration_name}"
                 json_file_name = f"{jsons_path}/{configuration_name}.json"
-                data_dir = f"{current_directory}/data"
-                gold_path = f"{data_dir}/{configuration_name}.pt"
-                checkpoint_path = f"{data_dir}/weights_grounding_dino/{weights_file}"
-                config_path = f"{current_directory}/GroundingDINO/groundingdino/config/{config_file}"
+                gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
+
                 parameters = [
                     "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
-                    f"{current_directory}/{script_name}",
+                    f"{CURRENT_DIR}/{script_name}",
                     f"--iterations {ITERATIONS}",
                     f"--testsamples {test_samples}",
                     f"--batchsize {batch_size}",
-                    f"--checkpointpath {checkpoint_path}",
+                    f"--checkpointpath {weights_file}",
                     f"--goldpath {gold_path}",
-                    f"--model {dnn_model}",
-                    f"--configpath {config_path}",
-                    f"--setup_type grounding_dino",
+                    f"--model {dnn}",
+                    f"--configpath {config_file}",
+                    f"--setup_type {setup_type}",
                     f"--floatthreshold {FLOAT_THRESHOLD}",
-                    f"--loghelperinterval 1",
+                    f"--loghelperinterval {log_interval}",
                     f"--precision {float_precision}",
-                    f"--microop Attention",
+                    f"--microop {micro_op}",
                     f"--{hardening}" if hardening else '',
                     f"--savelogits" if SAVE_LOGITS else '',
                     f"--lognvml" if LOG_NVML else ''
@@ -94,7 +112,7 @@ def configure():
                 command_list = [{
                     "killcmd": f"pkill -9 -f {script_name}",
                     "exec": " ".join(execute_parameters),
-                    "codename": dnn_model,
+                    "codename": dnn,
                     "header": " ".join(execute_parameters)
                 }]
 
