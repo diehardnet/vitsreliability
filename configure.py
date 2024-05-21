@@ -30,14 +30,15 @@ VITS_SETUPS = {
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
 }
 
+MICRO_BATCHED_SAMPLES = 8
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
-        4, 4, {None}, micro_op, 100
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, 100
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
-        4, 4, {None}, micro_op, 100
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, 100
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
