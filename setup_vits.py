@@ -202,6 +202,72 @@ class SetupVits(SetupBaseImageNet):
         torch.cuda.empty_cache()
         self.load_data_at_test()
 
+    def compare_inference(self, output, batch_id) -> int:
+        if self.current_iteration == 4:
+            output[0] *= 0
+            output[3] *= 0
+
+        golden = self.golden[batch_id]
+        gt_targets = self.gt_targets[batch_id]
+        # Make sure that they are on CPU
+        out_is_cuda, golden_is_cuda = output.is_cuda, golden.is_cuda
+        if out_is_cuda or golden_is_cuda:
+            dnn_log_helper.log_and_crash(
+                fatal_string=f"Tensors are not on CPU. OUT IS CUDA:{out_is_cuda} GOLDEN IS CUDA:{golden_is_cuda}")
+
+        # First check if the tensors are equal or not
+        if common.equal(lhs=golden, rhs=output, threshold=self.float_threshold) is True:
+            return 0
+
+        # ------------ Check the size of the tensors
+        if output.shape != golden.shape:
+            info_detail = f"shape-diff g:{golden.shape} o:{output.shape}"
+            if self.output_logger:
+                self.output_logger.error(info_detail)
+            dnn_log_helper.log_info_detail(info_detail)
+
+        # FP16 to FP32
+        golden, output = golden.float(), output.float()
+
+        output_errors = 0
+        # Iterate over the batches
+        golden_top_k_labels = common.get_top_k_labels_classification(input_tensor=golden,
+                                                                     top_k=configs.CLASSIFICATION_CRITICAL_TOP_K, dim=1)
+        output_top_k_labels = common.get_top_k_labels_classification(input_tensor=output,
+                                                                     top_k=configs.CLASSIFICATION_CRITICAL_TOP_K, dim=1)
+        for img_id, (output_batch, golden_batch, output_top_k, golden_top_k, gt_label) in enumerate(
+                zip(output, golden, output_top_k_labels, golden_top_k_labels, gt_targets)):
+            # using the same approach as the detection, compare only the positions that differ
+            if common.equal(lhs=output_batch, rhs=golden_batch, threshold=self.float_threshold) is False:
+                # ------------ Check if there is a Critical error ------------------------------------------------------
+                err_string = f"batch:{batch_id} imgid:{img_id}"
+                for i, (tpk_found, tpk_gold) in enumerate(zip(output_top_k, golden_top_k)):
+                    if tpk_found != tpk_gold:
+                        output_errors += 1
+                        error_detail_ctr = (f"critical {err_string} "
+                                            f"i:{i} "
+                                            f"g:{tpk_gold} "
+                                            f"o:{tpk_found} "
+                                            f"gt:{gt_label}")
+                        if self.output_logger:
+                            self.output_logger.error(error_detail_ctr)
+                        dnn_log_helper.log_error_detail(error_detail_ctr)
+                # ------------ Check error on the whole output ---------------------------------------------------------
+                # Not necessary to save everything, only the good info
+                # Data on output tensor
+                has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output_batch)
+                error_detail_out = f"{err_string} output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
+                # Data on abs differences
+                abs_diff = torch.abs(torch.subtract(golden_batch, output_batch))
+                has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
+                error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
+                output_errors += 1
+                if self.output_logger:
+                    self.output_logger.error(error_detail_out)
+                dnn_log_helper.log_error_detail(error_detail_out)
+
+        return output_errors
+
     def check_dnn_accuracy(self) -> None:
         if self.output_logger:
             self.output_logger.debug(f"Checking DNN accuracy")
