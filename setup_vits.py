@@ -5,9 +5,9 @@ sys.path.extend([
     'FasterTransformer/examples/pytorch/swin/SwinTransformerQuantization',
     # 'FasterTransformer/examples/pytorch/vit/ViT-Quantization',
 ])
-from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.models import build_model
-from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.SwinTransformer.data.build import build_transform
-from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.SwinTransformer.config import get_config
+# from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.models import build_model
+# from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.SwinTransformer.data.build import build_transform
+# from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.SwinTransformer.config import get_config
 
 import argparse
 import collections
@@ -132,16 +132,17 @@ class SetupVits(SetupBaseImageNet):
             model = model.half()
 
         elif self.precision == configs.INT8:
-            if self.model_name not in configs.INT8_MODELS:
-                raise ValueError(f"Model {self.model_name} is not supported with PTQ4ViT. Supported models are: {configs.INT8_MODELS}.")
+            raise ValueError("INT8 is not supported for ViTs")
+            # if self.model_name not in configs.INT8_MODELS:
+            #     raise ValueError(f"Model {self.model_name} is not supported with PTQ4ViT. Supported models are: {configs.INT8_MODELS}.")
             
-            args, config = self.__parse_options()
-            model = build_model(config)
+            # args, config = self.__parse_options()
+            # model = build_model(config)
 
-            cp_name = f"{self.model_name}_calib.pth"
-            path = os.path.join(configs.INT8_CKPT_DIR, cp_name)
-            self.__load_checkpoint(model, path)
-            self.transforms = build_transform(False, config)
+            # cp_name = f"{self.model_name}_calib.pth"
+            # path = os.path.join(configs.INT8_CKPT_DIR, cp_name)
+            # self.__load_checkpoint(model, path)
+            # self.transforms = build_transform(False, config)
 
         elif self.precision == configs.BFLOAT16:
             raise ValueError("BFLOAT16 is not supported for ViTs")
