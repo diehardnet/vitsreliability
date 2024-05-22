@@ -93,7 +93,8 @@ def run_setup(
 
     nvml_wrapper = None
     if args.lognvml:
-        nvml_wrapper = NVMLWrapperThread()
+        nvml_wrapper = NVMLWrapperThread(daemon=True)
+        nvml_wrapper.daemon = True
         nvml_wrapper.start()
 
     # Check if a device is ok and disable grad

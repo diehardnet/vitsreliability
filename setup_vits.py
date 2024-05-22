@@ -270,7 +270,9 @@ class SetupVits(SetupBaseImageNet):
                 if self.output_logger:
                     self.output_logger.error(error_detail_out)
                 dnn_log_helper.log_error_detail(error_detail_out)
-
+        # ------------ log and return
+        if output_errors != 0:
+            dnn_log_helper.log_error_count(error_count=output_errors)
         return output_errors
 
     def check_dnn_accuracy(self) -> None:
