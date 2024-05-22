@@ -27,6 +27,7 @@ import console_logger
 import dnn_log_helper
 import common
 from setup_base import SetupBaseImageNet
+import hardened_identity
 
 
 class SetupVits(SetupBaseImageNet):
@@ -124,6 +125,8 @@ class SetupVits(SetupBaseImageNet):
         if self.precision is not configs.INT8:
             model = timm.create_model(self.model_name, pretrained=True)
             self.transforms = self.__get_vit_transforms(model)
+            if self.hardened_model:
+                hardened_identity.replace_identity(model, profile_or_inference="inference", model_name=self.model_name)
         
         if self.precision == configs.FP16:
             model = model.half()
@@ -203,9 +206,10 @@ class SetupVits(SetupBaseImageNet):
         self.load_data_at_test()
 
     def compare_inference(self, output, batch_id) -> int:
-        if self.current_iteration == 4:
-            output[0] *= 0
-            output[3] *= 0
+        # uncomment to test the error detection
+        # if self.current_iteration == 4:
+        #     output[0] *= 0
+        #     output[3] *= 0
 
         golden = self.golden[batch_id]
         gt_targets = self.gt_targets[batch_id]

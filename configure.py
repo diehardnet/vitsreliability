@@ -13,8 +13,7 @@ import configs
 CURRENT_DIR = os.getcwd()
 
 # CHECKPOINT, CFG FILE, PRECISIONS, SETUP_TYPE, BATCH SIZE, TEST SAMPLES, hardening types, micro op, log interval
-VITS_SETUPS = {
-    # The parameter micro op for ViTs is ignored
+GROUNDING_DINO_SETUPS = {
     configs.GROUNDING_DINO_SWINT_OGC: (
         configs.GROUNDING_DINO_SWINT_OGC,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
@@ -27,7 +26,30 @@ VITS_SETUPS = {
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
         [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
     ),
+}
+
+VITS_SETUPS = {
+    # The parameter micro op for ViTs is ignored
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
+    # setup for ViTs, TODO: add int8 and hardened ID configs
+    configs.VIT_BASE_PATCH16_224 : (
+        configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    ),
+    configs.VIT_BASE_PATCH16_384 : (
+        configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    ),
+    configs.SWIN_BASE_PATCH4_WINDOW7_224 : (
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    ),
+    configs.SWIN_BASE_PATCH4_WINDOW12_384 : (
+        configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    ),
+    configs.DEIT_BASE_PATCH16_224 : (
+        configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    ),
+    configs.DEIT_BASE_PATCH16_384 : (
+        configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    )
 }
 
 MICRO_BATCHED_SAMPLES = 8
@@ -44,7 +66,8 @@ MICRO_SETUPS = {
 
 # Change for configure
 SETUPS = dict()
-# SETUPS.update(VITS_SETUPS)
+SETUPS.update(VITS_SETUPS)
+SETUPS.update(GROUNDING_DINO_SETUPS)
 SETUPS.update(MICRO_SETUPS)
 
 LOG_NVML = True
@@ -104,7 +127,7 @@ def configure():
                     f"--floatthreshold {FLOAT_THRESHOLD}",
                     f"--loghelperinterval {log_interval}",
                     f"--precision {float_precision}",
-                    f"--microop {micro_op}",
+                    f"--microop {micro_op}" if micro_op else '',
                     f"--{hardening}" if hardening else '',
                     f"--savelogits" if SAVE_LOGITS else '',
                     f"--lognvml" if LOG_NVML else ''
