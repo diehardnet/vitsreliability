@@ -12,15 +12,20 @@ First, you have to have the following requirements:
 
 ### Reliability evaluation requirements
 
-numpy
-1.24.1
-torch
-2.1.1+cu118
-timm
-0.9.12
-transformers
-4.41.0
+numpy 1.24.1
+torch 2.1.1+cu118
+timm 0.9.12
+transformers 4.41.0
  nvidia-ml-py
+ addict
+ yapf
+ pycocotools
+ 
+
+ Grouding DINO weights
+
+ https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+ https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth
 
 
 For the fault simulations and beam experiments:
