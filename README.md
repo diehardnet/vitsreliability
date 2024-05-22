@@ -12,6 +12,17 @@ First, you have to have the following requirements:
 
 ### Reliability evaluation requirements
 
+numpy
+1.24.1
+torch
+2.1.1+cu118
+timm
+0.9.12
+transformers
+4.41.0
+ nvidia-ml-py
+
+
 For the fault simulations and beam experiments:
 
 - For the beam experiments, you will need the scripts from [radhelper](https://github.com/radhelper) repositories 
