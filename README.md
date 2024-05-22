@@ -27,6 +27,8 @@ transformers 4.41.0
  https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
  https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth
 
+ COCO validation dataset
+
 
 For the fault simulations and beam experiments:
 
