@@ -86,7 +86,7 @@ SETUPS.update(GROUNDING_DINO_SETUPS)
 SETUPS.update(MICRO_SETUPS)
 
 LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
-FLOAT_THRESHOLD = 1e-4
+FLOAT_THRESHOLD = 1e-5
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)

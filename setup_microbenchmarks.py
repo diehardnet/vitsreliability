@@ -14,38 +14,42 @@ import configs
 import dnn_log_helper
 from setup_base import SetupBaseImageNet
 
-_MICRO_BENCHMARKS_DATA = dict()
+_MICRO_BENCHMARKS_DATA = [1e-10]
 
 
 class LayerSaveHook:
-    def __init__(self, layer_id, name):
+    def __init__(self, layer_id, name, micro_op):
         self.layer_id = layer_id
         self.name = name
+        self.micro_op = micro_op
 
     # def create_hook(layer_id, name):
     def hook_function_to_extract_layers(self, module, module_input, kwargs, module_output) -> None:
         global _MICRO_BENCHMARKS_DATA
         layer_class = module.__class__.__name__.strip()
         layer_num_parameters = sum(p.numel() for p in module.parameters())
+        input_size = sum(p.numel() for p in module_input)
+        micro_op = layer_num_parameters * input_size
         save_path = f"id_{1}_name_{0}_class_{layer_class}"
         save_path += f"_params_{layer_num_parameters}_output_size_{module_output.numel()}.pt"
         assert len(module_input) == 1, "Problem on module input, >1"
-        input_by_output = module_output.numel()
-        _MICRO_BENCHMARKS_DATA[save_path] = [
-            module_input[0].clone().detach(),
-            module_output.clone().detach(),
-            copy.deepcopy(module),
-            self.layer_id,
-            self.name,
-            layer_num_parameters,
-            layer_class,
-            kwargs
-        ]
 
-        # Get only the largest layers
-        _MAX_PARAMETERS_VALUE = input_by_output
+        # IT will select only the largest one
+        if layer_class == self.micro_op and _MICRO_BENCHMARKS_DATA[-1] < micro_op:
+            _MICRO_BENCHMARKS_DATA = [
+                module_input[0].clone().detach(),
+                module_output.clone().detach(),
+                copy.deepcopy(module),
+                self.layer_id,
+                self.name,
+                layer_num_parameters,
+                layer_class,
+                kwargs,
+                save_path,
+                micro_op,
+                input_size
+            ]
 
-    # return hook_function_to_extract_layers
     def clear(self):
         del self.layer_id, self.name
 
@@ -166,25 +170,32 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
     def __select_the_best_microbenchmark(self):
         del self.model, self.input_list, self.golden
         self.model, self.input_list, self.golden = None, None, None
-        max_num_mac_ops = -1e10
-        for path_tensors in _MICRO_BENCHMARKS_DATA.keys():
-            micro_data = _MICRO_BENCHMARKS_DATA[path_tensors]
-            module_input, module_output, module, layer_id, name, layer_num_parameters, layer_class, kwargs = micro_data
-            # ------------------------------------------------------------
-            # Double check if the re-execution works
-            output_test = module(module_input, **kwargs)
-            assert module_input.is_cuda and next(module.parameters()).is_cuda
-            if common.equal(lhs=output_test, rhs=module_output, threshold=0.0) is False:
-                if self.output_logger:
-                    self.output_logger.error(f"Diff:{torch.sum(torch.abs(torch.subtract(output_test, module_output)))}")
-                raise ValueError("Output tensors not equal")
+
+        (module_input, module_output, module, layer_id, name,
+         layer_num_parameters, layer_class, kwargs, save_path, micro_op, internal_input_size) = _MICRO_BENCHMARKS_DATA
+        assert internal_input_size == module_input.numel(), (f"Inputs size differs:"
+                                                             f"{internal_input_size} != {module_input.numel()}")
+        # max_num_mac_ops = -1e10
+        # for path_tensors in _MICRO_BENCHMARKS_DATA.keys():
+        #     micro_data = _MICRO_BENCHMARKS_DATA[path_tensors]
+        #     module_input, module_output, module, layer_id, name, layer_num_parameters, layer_class
+        #     , kwargs = micro_data
+        # ------------------------------------------------------------
+        # Double check if the re-execution works
+        output_test = module(module_input, **kwargs)
+
+        assert module_input.is_cuda and next(module.parameters()).is_cuda
+        if common.equal(lhs=output_test, rhs=module_output, threshold=0.0) is False:
+            if self.output_logger:
+                self.output_logger.error(f"Diff:{torch.sum(torch.abs(torch.subtract(output_test, module_output)))}")
+            raise ValueError("Output tensors not equal")
             # ------------------------------------------------------------
             # Save the best fit (largest layer)
-            mac_op = layer_num_parameters * module_input.numel()
-            if layer_class == self.micro_op and max_num_mac_ops < mac_op:
-                max_num_mac_ops = mac_op
-                self.model, self.input_list, self.golden, self.kwargs = module, module_input, module_output, kwargs
-                self.best_fit = {"id": layer_id, "name": name, "num_param": layer_num_parameters, "class": layer_class}
+            # mac_op = layer_num_parameters * module_input.numel()
+            # if layer_class == self.micro_op and max_num_mac_ops < mac_op:
+            #     max_num_mac_ops = mac_op
+        self.model, self.input_list, self.golden, self.kwargs = module, module_input, module_output, kwargs
+        self.best_fit = {"id": layer_id, "name": name, "num_param": layer_num_parameters, "class": layer_class}
 
     def _extract_internal_layers_data(self):
         model_copy = copy.deepcopy(self.model)
@@ -192,7 +203,7 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
         handlers = list()
         for layer_id, (name, layer) in enumerate(model_copy.named_modules()):
             if sum(p.numel() for p in layer.parameters()) != 0:
-                hook = LayerSaveHook(layer_id, name)
+                hook = LayerSaveHook(layer_id=layer_id, name=name, micro_op=self.micro_op)
                 handler = layer.register_forward_hook(hook.hook_function_to_extract_layers, with_kwargs=True)
                 handlers.append((handler, hook))
         # Run the actual model for the first batch
