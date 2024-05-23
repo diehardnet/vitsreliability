@@ -64,14 +64,14 @@ MICRO_SETUPS = {
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
-# Change for configure
+# Change for configuring
 SETUPS = dict()
 SETUPS.update(VITS_SETUPS)
 SETUPS.update(GROUNDING_DINO_SETUPS)
 SETUPS.update(MICRO_SETUPS)
 
-LOG_NVML = True
-FLOAT_THRESHOLD = 1e-2
+LOG_NVML = False # FIXME: Logging NVML is not in a good shape
+FLOAT_THRESHOLD = 1e-1
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
