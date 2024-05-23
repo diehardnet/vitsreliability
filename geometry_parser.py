@@ -1,16 +1,19 @@
-import numpy as np
 import enum
+
+import numpy as np
 
 
 class ErrorGeometry(enum.Enum):
     MASKED = -1
     SINGLE = 0
-    LINE = 1
-    BLOCK = 2
-    CUBIC = 3
-    RANDOM = 4
+    RANDOM = 1
+    LINE = 2
+    BLOCK = 3
+    CUBIC = 4
 
     def __gt__(self, other): return self.value > other.value
+
+    def __lt__(self, other): return self.value < other.value
 
     def __str__(self): return self.name
 
@@ -29,29 +32,34 @@ def geometry_comparison(diff: np.ndarray) -> ErrorGeometry:
         if dim > 3 or dim < 1:
             raise ValueError("Diff dimensions should be between 1-3")
 
-        # Use label function to labelling the matrix
+        # Use label function to labeling the matrix
         where_is_corrupted = np.argwhere(diff != 0)
 
         # Get all positions of X and Y
-        all_x_positions = where_is_corrupted[:, 0]
         # Count how many times each value is in the list
-        unique_elements, counter_x_positions = np.unique(all_x_positions, return_counts=True)
+        _, counter_x_positions = np.unique(
+            where_is_corrupted[:, 0], return_counts=True
+        )
         # Check if any value is in the list more than one time
         row_error = np.any(counter_x_positions > 1)
 
         col_error, box_error = None, None
         # Do the same for the other dimensions
-        if dim == 2:
-            all_y_positions = where_is_corrupted[:, 1]
-            unique_elements, counter_y_positions = np.unique(all_y_positions, return_counts=True)
+        if dim >= 2:
+            _, counter_y_positions = np.unique(
+                where_is_corrupted[:, 1], return_counts=True
+            )
             col_error = np.any(counter_y_positions > 1)
 
         if dim == 3:
-            all_z_positions = where_is_corrupted[:, 2]
-            unique_elements, counter_z_positions = np.unique(all_z_positions, return_counts=True)
+            _, counter_z_positions = np.unique(
+                where_is_corrupted[:, 2], return_counts=True
+            )
             box_error = np.any(counter_z_positions > 1)
 
         dim_err_count = sum([1 for x in [row_error, col_error, box_error] if x])
+        # print(dim, row_error, col_error, box_error)
+        # print(np.nonzero(diff))
 
         if dim_err_count == 3:
             return ErrorGeometry.CUBIC

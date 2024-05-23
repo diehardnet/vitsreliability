@@ -1,29 +1,29 @@
 import argparse
 import logging
 import os
-import re
 import pathlib
+import re
+import shutil
 
 import numpy
 import torch
+from PIL import Image
 
-from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
-from GroundingDINO.groundingdino.models import build_model as gdino_build_model
-from GroundingDINO.groundingdino.util.utils import clean_state_dict as gdino_clean_state_dict
 import GroundingDINO.groundingdino.datasets.transforms as gdino_transforms
-from GroundingDINO.groundingdino.util.misc import collate_fn as gdino_collate_fn
-from GroundingDINO.groundingdino.util import get_tokenlizer as gdino_get_tokenlizer
-
+import common
+import configs
+import dnn_log_helper
+import hardened_identity
 from GroundingDINO.demo.test_ap_on_coco import CocoDetection as GDINOCocoDetection
 from GroundingDINO.demo.test_ap_on_coco import PostProcessCocoGrounding as GDINOPostProcessCocoGrounding
 from GroundingDINO.groundingdino.datasets.cocogrounding_eval import (
     CocoGroundingEvaluator as GDINOCocoGroundingEvaluator
 )
-
-import configs
-import dnn_log_helper
-import common
-import hardened_identity
+from GroundingDINO.groundingdino.models import build_model as gdino_build_model
+from GroundingDINO.groundingdino.util import get_tokenlizer as gdino_get_tokenlizer
+from GroundingDINO.groundingdino.util.misc import collate_fn as gdino_collate_fn
+from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
+from GroundingDINO.groundingdino.util.utils import clean_state_dict as gdino_clean_state_dict
 from setup_base import SetupBase
 
 
@@ -44,6 +44,7 @@ class SetupGroundingDINO(SetupBase):
             raise NotImplementedError("Precisions different than FP32 are not available for now")
 
         self.logits_path = os.path.join(pathlib.Path.home(), "grounding_dino_logits")
+        self.save_logits_max_disk_usage = 0.9
         if self.save_logits:
             if self.output_logger:
                 self.output_logger.debug(f"Save logits enabled, creating {self.logits_path}")
@@ -70,7 +71,7 @@ class SetupGroundingDINO(SetupBase):
         self.text_encoder_type = cfg_args.text_encoder_type
 
     def load_dataset(self) -> None:
-        # build dataloader
+        # COCO default transformations
         transform = gdino_transforms.Compose(
             [
                 gdino_transforms.RandomResize([800], max_size=1333),
@@ -78,33 +79,45 @@ class SetupGroundingDINO(SetupBase):
                 gdino_transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
         )
-        dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS, transforms=transform)
-        self.selected_samples = list(range(self.test_sample))
-        subset = torch.utils.data.SequentialSampler(self.selected_samples)
-        test_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=1,
-                                                  collate_fn=gdino_collate_fn, sampler=subset)
-        self.coco_api = dataset.coco
+        # build dataloader
+        if self.dataset == configs.COCO:
+            dataset = GDINOCocoDetection(configs.COCO_DATASET_VAL, configs.COCO_DATASET_ANNOTATIONS,
+                                         transforms=transform)
+            self.selected_samples = list(range(self.test_sample))
+            subset = torch.utils.data.SequentialSampler(self.selected_samples)
+            test_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=1,
+                                                      collate_fn=gdino_collate_fn, sampler=subset)
+            self.coco_api = dataset.coco
 
-        # build captions
-        caption = self.input_captions
-        if self.input_captions == '':
-            category_dict = dataset.coco.dataset['categories']
-            cat_list = [item['name'] for item in category_dict]
-            caption = " . ".join(cat_list) + ' .'
+            # build captions
+            caption = self.input_captions
+            if self.input_captions == '':
+                category_dict = dataset.coco.dataset['categories']
+                cat_list = [item['name'] for item in category_dict]
+                caption = " . ".join(cat_list) + ' .'
 
-        # For each image in the batch I'm searching for the COCO classes
-        self.input_captions = [caption] * self.batch_size
-        if self.output_logger:
-            self.output_logger.debug(f"Input text prompt:{caption}")
+            # For each image in the batch I'm searching for the COCO classes
+            self.input_captions = [caption] * self.batch_size
+            if self.output_logger:
+                self.output_logger.debug(f"Input text prompt:{caption}")
 
-        self.input_list, self.gt_targets = list(), list()
-        for i, (inputs, targets) in enumerate(test_loader):
-            # Only the inputs must be in the device
-            self.input_list.append(inputs.to(configs.GPU_DEVICE))
-            self.gt_targets.append(targets)
+            self.input_list, self.gt_targets = list(), list()
+            for i, (inputs, targets) in enumerate(test_loader):
+                # Only the inputs must be in the device
+                self.input_list.append(inputs.to(configs.GPU_DEVICE))
+                self.gt_targets.append(targets)
+        elif self.dataset == configs.CUSTOM_DATASET:
+            with open(self.imgs_file_path, 'r') as f:
+                input_paths = f.readlines()
+            for i, input_image_path in enumerate(input_paths):
+                image_pil = Image.open(input_image_path).convert("RGB")  # load image
+                image, _ = transform(image_pil, None)  # 3, h, w
+                self.input_list.append(image.to(configs.GPU_DEVICE))
+        else:
+            raise NotImplementedError("Dataset not implemented yet")
 
     def get_coco_evaluator(self, predicted: list, targets: list) -> GDINOCocoGroundingEvaluator:
-        # build post processor
+        # build post-processor
         tokenlizer = gdino_get_tokenlizer.get_tokenlizer(self.text_encoder_type)
         postprocessor = GDINOPostProcessCocoGrounding(coco_api=self.coco_api, tokenlizer=tokenlizer)
         # build evaluator
@@ -137,9 +150,13 @@ class SetupGroundingDINO(SetupBase):
                 dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY: {correctness * 100.0}%")
 
     def _save_logits(self, output, batch_id):
-        if self.save_logits:
+        total, used, free = shutil.disk_usage("/")
+        used_percent = used / total
+        if used_percent > self.save_logits_max_disk_usage:
+            dnn_log_helper.log_info_detail(info_detail=f"disk usage: {used_percent:.3f}, not saving the logits")
+        elif self.save_logits:
             log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
-            save_file = f"{os.path.basename(log_helper_file)}_{batch_id}_it_{self.current_iteration}.pt"
+            save_file = f"{os.path.basename(log_helper_file)}_btid_{batch_id}_it_{self.current_iteration}.pt"
             save_file = os.path.join(self.logits_path, save_file)
             if self.output_logger:
                 self.output_logger.debug(f"Saving logits at:{save_file}")
@@ -171,21 +188,24 @@ class SetupGroundingDINO(SetupBase):
             return 0
 
         # ------------ Check if there is a Critical error ----------------------------------------------------------
-        current_map = self.get_iou_for_single_image_at_test(output=output, batch_id=batch_id)
-        # The original map/mar coco, 0.5:0.95
-        map_curr, mar_curr = current_map[0], current_map[6]
-        map_gold = golden_metrics[0] * self.coco_metrics_threshold
-        mar_gold = golden_metrics[6] * self.coco_metrics_threshold
         critical_or_not = "tolerable"
-        if map_curr <= map_gold or mar_curr <= mar_gold:
-            critical_or_not = "critical"
-            self._save_logits(output=output, batch_id=batch_id)
+        precision_str = recall_str = "1"
+        if self.dataset == configs.COCO:
+            current_map = self.get_iou_for_single_image_at_test(output=output, batch_id=batch_id)
+            # The original map/mar coco, 0.5:0.95
+            map_curr, mar_curr = current_map[0], current_map[6]
+            map_gold = golden_metrics[0] * self.coco_metrics_threshold
+            mar_gold = golden_metrics[6] * self.coco_metrics_threshold
+            if map_curr <= map_gold or mar_curr <= mar_gold:
+                critical_or_not = "critical"
 
-        precision_str = ";".join(f"{v:.4e}" for v in current_map[:6])
-        recall_str = ";".join(f"{v:.4e}" for v in current_map[6:])
+            precision_str = ";".join(f"{v:.4e}" for v in current_map[:6])
+            recall_str = ";".join(f"{v:.4e}" for v in current_map[6:])
+
+        # if critical_or_not in ["undefined", "critical"]:
+        self._save_logits(output=output, batch_id=batch_id)
 
         err_string = f"{critical_or_not} batch:{batch_id} gd_pre:{precision_str} gd_rec:{recall_str}"
-
         if self.output_logger:
             self.output_logger.error(err_string)
         dnn_log_helper.log_error_detail(err_string)
@@ -194,7 +214,7 @@ class SetupGroundingDINO(SetupBase):
         output_errors = 1
         for (out_tensor_type, output_tensor), (gld_tensor_type, golden_tensor) in zip(output.items(),
                                                                                       golden_dict.items()):
-            output_errors += common.count_errors(lhs=output_tensor, rhs=golden_tensor)
+            output_errors += 1  # put only 1 per item, if you increment too much, it crashes because of too many errors
 
             # Data on output tensor
             has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output_tensor)

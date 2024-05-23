@@ -30,6 +30,7 @@ class SetupBase:
         self.dataset = args.dataset
         self.iterations = args.iterations
         self.save_logits = args.savelogits
+        self.imgs_file_path = args.imgspath
 
         # default attributes
         self.correctness_threshold = 0.7  # Based on the whole dataset accuracy. Used only for golden generate part

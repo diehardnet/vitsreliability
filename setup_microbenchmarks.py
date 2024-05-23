@@ -1,15 +1,18 @@
 import argparse
 import copy
 import logging
+import os
+import pathlib
 import re
+import shutil
 
 import timm
 import torch
+
+import common
 import configs
 import dnn_log_helper
-import common
 from setup_base import SetupBaseImageNet
-import geometry_parser
 
 _MICRO_BENCHMARKS_DATA = dict()
 
@@ -59,6 +62,13 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
         self.best_fit = dict()
         self.kwargs = dict()
 
+        self.logits_path = os.path.join(pathlib.Path.home(), "micro_logits")
+        self.save_logits_max_disk_usage = 0.9
+        if self.save_logits:
+            if self.output_logger:
+                self.output_logger.debug(f"Save logits enabled, creating {self.logits_path}")
+            pathlib.Path(self.logits_path).mkdir(parents=True, exist_ok=True)
+
     def __call__(self, batch_id, **kwargs):
         # in this benchmark each call is an iteration
         return self.model(self.input_list)
@@ -90,18 +100,32 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
     def check_dnn_accuracy(self) -> None:
         pass  # This does nothing as it's only micro benchmarks
 
-    def __get_error_geometry(self, output_tensor: torch.tensor) -> geometry_parser.ErrorGeometry:
-        # FIXME: The geometry is not always correct
-        geometry_type = geometry_parser.ErrorGeometry.MASKED
-        golden_cpu = self.golden.to(configs.CPU)
-        output_cpu = output_tensor.to(configs.CPU)
-        for batch_out, batch_golden in zip(golden_cpu, output_cpu):
-            diff_matrix = torch.not_equal(torch.abs(torch.sub(batch_out, batch_golden)), 0.0).type(torch.int)
-            geo_batch = geometry_parser.geometry_comparison(diff=diff_matrix.numpy())
-            # Get the largest error type
-            if geo_batch > geometry_type:
-                geometry_type = geo_batch
-        return geometry_type
+    # def __get_error_geometry(self, output_tensor: torch.tensor) -> geometry_parser.ErrorGeometry:
+    #     # FIXME: The geometry is not always correct
+    #     geometry_type = geometry_parser.ErrorGeometry.MASKED
+    #     golden_cpu = self.golden.to(configs.CPU)
+    #     output_cpu = output_tensor.to(configs.CPU)
+    #     for batch_out, batch_golden in zip(golden_cpu, output_cpu):
+    #         diff_matrix = torch.not_equal(torch.abs(torch.sub(batch_out, batch_golden)), 0.0).type(torch.int)
+    #         geo_batch = geometry_parser.geometry_comparison(diff=diff_matrix.numpy())
+    #         # Get the largest error type
+    #         if geo_batch > geometry_type:
+    #             geometry_type = geo_batch
+    #     return geometry_type
+
+    def __save_logits(self, output):
+        total, used, free = shutil.disk_usage("/")
+        used_percent = used / total
+        if used_percent > self.save_logits_max_disk_usage:
+            dnn_log_helper.log_info_detail(info_detail=f"disk usage: {used_percent:.3f}, not saving the logits")
+        elif self.save_logits:
+            log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+            save_file = f"{os.path.basename(log_helper_file)}_it_{self.current_iteration}.pt"
+            save_file = os.path.join(self.logits_path, save_file)
+            if self.output_logger:
+                self.output_logger.debug(f"Saving logits at:{save_file}")
+            dnn_log_helper.log_info_detail(info_detail=f"LOGITS_AT:{save_file}")
+            torch.save(output, save_file)
 
     def compare_inference(self, output, batch_id) -> int:
         # if self.current_iteration % 7 == 0:
@@ -118,12 +142,13 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
             output_errors = common.count_errors(lhs=output, rhs=self.golden)
             # ----------------------------------------------------------------------------------------------------------
             # Error geometry
-            error_geometry = self.__get_error_geometry(output_tensor=output)
-            error_detail_out = f"geometry:{error_geometry} "
+            # error_geometry = self.__get_error_geometry(output_tensor=output)
+            # error_detail_out = f"geometry:{error_geometry} "
+            self.__save_logits(output=output)
             # ----------------------------------------------------------------------------------------------------------
             # Data on output tensor
             has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output)
-            error_detail_out += f"output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
+            error_detail_out = f"output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
             # Data on abs differences
             abs_diff = torch.abs(torch.subtract(output, self.golden))
             has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)

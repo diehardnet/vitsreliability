@@ -28,39 +28,54 @@ GROUNDING_DINO_SETUPS = {
     ),
 }
 
+BATCH_SIZE_VITS = 32
+TEST_SAMPLES_VITS = BATCH_SIZE_VITS
+LOG_INTERVAL_VITS = 1
+
 VITS_SETUPS = {
     # The parameter micro op for ViTs is ignored
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
     # setup for ViTs, TODO: add int8 and hardened ID configs
-    configs.VIT_BASE_PATCH16_224 : (
-        configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    configs.VIT_BASE_PATCH16_224: (
+        configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     ),
-    configs.VIT_BASE_PATCH16_384 : (
-        configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    configs.VIT_BASE_PATCH16_384: (
+        configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     ),
-    configs.SWIN_BASE_PATCH4_WINDOW7_224 : (
-        configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    configs.SWIN_BASE_PATCH4_WINDOW7_224: (
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS, {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     ),
-    configs.SWIN_BASE_PATCH4_WINDOW12_384 : (
-        configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    configs.SWIN_BASE_PATCH4_WINDOW12_384: (
+        configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS, {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     ),
-    configs.DEIT_BASE_PATCH16_224 : (
-        configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    configs.DEIT_BASE_PATCH16_224: (
+        configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     ),
-    configs.DEIT_BASE_PATCH16_384 : (
-        configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    configs.DEIT_BASE_PATCH16_384: (
+        configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     )
 }
 
-MICRO_BATCHED_SAMPLES = 8
+MICRO_BATCHED_SAMPLES = BATCH_SIZE_VITS
+MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, 100
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, 100
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
@@ -70,8 +85,8 @@ SETUPS.update(VITS_SETUPS)
 SETUPS.update(GROUNDING_DINO_SETUPS)
 SETUPS.update(MICRO_SETUPS)
 
-LOG_NVML = False # FIXME: Logging NVML is not in a good shape
-FLOAT_THRESHOLD = 1e-1
+LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
+FLOAT_THRESHOLD = 1e-4
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
