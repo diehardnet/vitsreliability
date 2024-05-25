@@ -2,12 +2,31 @@ import sys
 # sys.path.append('FasterTransformer/examples/pytorch/swin/SwinTransformerQuantization')
 # sys.path.append('FasterTransformer/examples/pytorch/vit/ViT-Quantization')
 sys.path.extend([
-    'FasterTransformer/examples/pytorch/swin/SwinTransformerQuantization',
+    'FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization',
     # 'FasterTransformer/examples/pytorch/vit/ViT-Quantization',
 ])
+
 # from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.models import build_model
 # from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.SwinTransformer.data.build import build_transform
 # from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization.SwinTransformer.config import get_config
+# from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization import quant_utils
+import importlib
+
+# Dynamically import the build_model function
+build_model_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.models')
+build_model = getattr(build_model_module, 'build_model')
+
+# Dynamically import the build_transform function
+build_transform_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.SwinTransformer.data.build')
+build_transform = getattr(build_transform_module, 'build_transform')
+
+# Dynamically import the get_config function
+get_config_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.SwinTransformer.config')
+get_config = getattr(get_config_module, 'get_config')
+
+# Dynamically import the quant_utils module
+quant_utils = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.quant_utils')
+
 
 import argparse
 import collections
@@ -38,9 +57,9 @@ class SetupVits(SetupBaseImageNet):
         self.golden = list()
         self.input_list = list()
         self.gt_targets = list()
-
-        # # for int8 swin models
-        # if args.cfg or self.local_rank:
+        self.test_loader = None # only for int8 models
+        # for int8 swin models
+        # if args.cfg or args.local_rank:
         #     self.args = args
         # self.correctness_threshold = 0.6  # Based on the whole dataset accuracy. Used only for golden generate part
 
@@ -101,7 +120,7 @@ class SetupVits(SetupBaseImageNet):
         parser.add_argument('--calib-batchsz', type=int, default=8, help='Batch size when doing calibration')
         parser.add_argument('--calib-output-path', type=str, help='Output directory to save calibrated model')
         # distributed training
-        parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel', default=0)
+        parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel', default=-1)
 
         parser.add_argument("--num-epochs", type=int, default=10, help="Number of epochs to run QAT fintuning.")
         parser.add_argument("--qat-lr", type=float, default=5e-7, help="learning rate for QAT.")
@@ -112,10 +131,10 @@ class SetupVits(SetupBaseImageNet):
         # for acceleration
         parser.add_argument('--fused_window_process', action='store_true', help='Fused window shift & window partition, similar for reversed part.')
 
-        # quant_utils.add_arguments(parser)
+        quant_utils.add_arguments(parser)
         args, unparsed = parser.parse_known_args()
-        # args = quant_utils.set_args(args)
-        # quant_utils.set_default_quantizers(args)
+        args = quant_utils.set_args(args)
+        quant_utils.set_default_quantizers(args)
 
         config = get_config(args)
 
@@ -130,33 +149,34 @@ class SetupVits(SetupBaseImageNet):
         
         if self.precision == configs.FP16:
             model = model.half()
+            class CustomToFP16:
+                def __call__(self, tensor_in):
+                    return tensor_in.type(torch.float16)
+
+            self.transforms.transforms.insert(-1, CustomToFP16())
 
         elif self.precision == configs.INT8:
-            raise ValueError("INT8 is not supported for ViTs")
-            # if self.model_name not in configs.INT8_MODELS:
-            #     raise ValueError(f"Model {self.model_name} is not supported with PTQ4ViT. Supported models are: {configs.INT8_MODELS}.")
-            
-            # args, config = self.__parse_options()
-            # model = build_model(config)
+            if self.model_name not in configs.INT8_MODELS:
+                raise ValueError(f"Model {self.model_name} is not supported with PTQ4ViT. Supported models are: {configs.INT8_MODELS}.")
 
-            # cp_name = f"{self.model_name}_calib.pth"
-            # path = os.path.join(configs.INT8_CKPT_DIR, cp_name)
-            # self.__load_checkpoint(model, path)
-            # self.transforms = build_transform(False, config)
+            # config = get_config(self.args)
+            args, config = self.__parse_options()
+            model = build_model(config)
+            # model, test_loader = main()
+            quant_utils.configure_model(model, args, False)
+
+            cp_name = f"{self.model_name}_calib.pth"
+            path = os.path.join(configs.INT8_CKPT_DIR, cp_name)
+            self.__load_checkpoint(model, path)
+            self.transforms = build_transform(False, config)
 
         elif self.precision == configs.BFLOAT16:
             raise ValueError("BFLOAT16 is not supported for ViTs")
 
         model.eval()
         model.to(configs.GPU_DEVICE)
-        model.zero_grad(set_to_none=True)
-        self.model = model
-        if self.precision == configs.FP16:
-            class CustomToFP16:
-                def __call__(self, tensor_in):
-                    return tensor_in.type(torch.float16)
-
-            self.transforms.transforms.insert(-1, CustomToFP16())
+        # model.zero_grad(set_to_none=True)
+        self.model = model            
 
     def __get_vit_config(self, model) -> Dict:
         return timm.data.resolve_data_config({}, model=model)
@@ -165,37 +185,36 @@ class SetupVits(SetupBaseImageNet):
         return timm.data.transforms_factory.create_transform(**self.__get_vit_config(model))
 
     def load_dataset(self) -> None:
-        # if self.precision is not configs.INT8:
-        super().load_dataset()
-        if self.precision == configs.FP16:
-            self.input_list = [input_tensor.half() for input_tensor in self.input_list]
+        if self.precision == configs.INT8:
+            if self.transforms is None:
+                raise ValueError("First you have to set the set of transforms")
 
-            # for input, label in zip(self.input_list, self.gt_targets):
-            #     print(input.dtype, label.dtype)
-        # else:
-        #     if self.transforms is None:
-        #         raise ValueError("First you have to set the set of transforms")
+            if self.output_logger:
+                self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
 
-        #     if self.output_logger:
-        #         self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
+            # random sampler
+            sampler_generator = torch.Generator(device=configs.CPU)
+            sampler_generator.manual_seed(configs.TORCH_SEED)
 
-        #     # Set a sampler on the CPU
-        #     sampler_generator = torch.Generator(device=configs.CPU)
-        #     sampler_generator.manual_seed(configs.TORCH_SEED)
+            test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
+                                                    split='val')
+            subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
+                                                    generator=sampler_generator)
+            test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
+                                                    shuffle=False, pin_memory=True)
 
-        #     test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
-        #                                             split='val')
-        #     subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
-        #                                             generator=sampler_generator)
-        #     test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
-        #                                             shuffle=False, pin_memory=True)
-
-        #     # TODO: it is necessary to save which images are being loaded
-        #     self.selected_samples = list()
-        #     for i, (inputs, labels) in enumerate(test_loader):
-        #         # Only the inputs must be in the device
-        #         self.input_list.append(inputs.to("cuda:0"))
-        #         self.gt_targets.append(labels)
+            # TODO: it is necessary to save which images are being loaded
+            selected_indices = random.sample(range(len(test_loader)), int(self.test_sample / self.batch_size))
+            for i, (inputs, labels) in enumerate(test_loader):
+                # Only the inputs must be in the device
+                if i in selected_indices:
+                    self.input_list.append(inputs.to("cuda:0"))
+                    self.gt_targets.append(labels)
+        else:
+            super().load_dataset()
+            if self.precision == configs.FP16:
+                self.input_list = [input_tensor.half() for input_tensor in self.input_list]
+        
 
     def clear_gpu_memory_and_reload(self):
         if self.output_logger:

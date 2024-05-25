@@ -12,19 +12,21 @@ import configs
 
 CURRENT_DIR = os.getcwd()
 
+GROUNDING_DINO_SAMPLES = 8
+
 # CHECKPOINT, CFG FILE, PRECISIONS, SETUP_TYPE, BATCH SIZE, TEST SAMPLES, hardening types, micro op, log interval
 GROUNDING_DINO_SETUPS = {
     configs.GROUNDING_DINO_SWINT_OGC: (
         configs.GROUNDING_DINO_SWINT_OGC,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-        [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
+        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1
     ),
     configs.GROUNDING_DINO_SWINB_COGCOOR: (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
-        [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
+        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1
     ),
 }
 
@@ -66,27 +68,31 @@ VITS_SETUPS = {
     )
 }
 
-MICRO_BATCHED_SAMPLES = BATCH_SIZE_VITS
+MICRO_BATCHED_SAMPLES = 32
 MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
-        configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
+        configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
+    ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
+    **{f"swin_{micro_op}": (
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
         MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
-        configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
+        configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
         MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
 # Change for configuring
 SETUPS = dict()
-SETUPS.update(VITS_SETUPS)
-SETUPS.update(GROUNDING_DINO_SETUPS)
+# SETUPS.update(VITS_SETUPS)
+# SETUPS.update(GROUNDING_DINO_SETUPS)
 SETUPS.update(MICRO_SETUPS)
 
 LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
-FLOAT_THRESHOLD = 1e-4
+FLOAT_THRESHOLD = 0
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
@@ -127,9 +133,11 @@ def configure():
                     configuration_name = f"{dnn_key}_{configuration_name}"
                 json_file_name = f"{jsons_path}/{configuration_name}.json"
                 gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
+                if float_precision == configs.INT8:
+                    cfg_path = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
 
                 parameters = [
-                    "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
+                    # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
                     f"{CURRENT_DIR}/{script_name}",
                     f"--iterations {ITERATIONS}",
                     f"--testsamples {test_samples}",
@@ -145,7 +153,10 @@ def configure():
                     f"--microop {micro_op}" if micro_op else '',
                     f"--{hardening}" if hardening else '',
                     f"--savelogits" if SAVE_LOGITS else '',
-                    f"--lognvml" if LOG_NVML else ''
+                    f"--lognvml" if LOG_NVML else '',
+                    f"--cfg {cfg_path}" if float_precision == configs.INT8 else '',
+                    f"--int8-mode {1}" if float_precision == configs.INT8 else '',
+                    f"--resume {weights_file}" if float_precision == configs.INT8 else '',
                 ]
                 execute_parameters = parameters + ["--disableconsolelog"]
                 command_list = [{
@@ -164,6 +175,7 @@ def configure():
                 execute_cmd(generate_cmd)
 
     print("Json creation and golden generation finished")
+    print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
 

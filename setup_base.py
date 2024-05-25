@@ -134,6 +134,7 @@ class SetupBaseClassification(SetupBase):
                                                                      top_k=configs.CLASSIFICATION_CRITICAL_TOP_K, dim=1)
         output_top_k_labels = common.get_top_k_labels_classification(input_tensor=output,
                                                                      top_k=configs.CLASSIFICATION_CRITICAL_TOP_K, dim=1)
+
         for img_id, (output_batch, golden_batch, output_top_k, golden_top_k, gt_label, real_img_id) in enumerate(
                 zip(output, golden, output_top_k_labels, golden_top_k_labels, gt_targets, self.selected_samples)):
             # using the same approach as the detection, compare only the positions that differ

@@ -14,38 +14,54 @@ import configs
 import dnn_log_helper
 from setup_base import SetupBaseImageNet
 
-_MICRO_BENCHMARKS_DATA = dict()
+_MICRO_BENCHMARKS_DATA = [1e-10]
 
 
 class LayerSaveHook:
-    def __init__(self, layer_id, name):
+    def __init__(self, layer_id, name, micro_op):
         self.layer_id = layer_id
         self.name = name
+        self.micro_op = micro_op
 
     # def create_hook(layer_id, name):
     def hook_function_to_extract_layers(self, module, module_input, kwargs, module_output) -> None:
         global _MICRO_BENCHMARKS_DATA
         layer_class = module.__class__.__name__.strip()
         layer_num_parameters = sum(p.numel() for p in module.parameters())
+        input_size = sum(p.numel() for p in module_input)
+        micro_op = layer_num_parameters * input_size
         save_path = f"id_{1}_name_{0}_class_{layer_class}"
         save_path += f"_params_{layer_num_parameters}_output_size_{module_output.numel()}.pt"
         assert len(module_input) == 1, "Problem on module input, >1"
-        input_by_output = module_output.numel()
-        _MICRO_BENCHMARKS_DATA[save_path] = [
-            module_input[0].clone().detach(),
-            module_output.clone().detach(),
-            copy.deepcopy(module),
-            self.layer_id,
-            self.name,
-            layer_num_parameters,
-            layer_class,
-            kwargs
-        ]
 
-        # Get only the largest layers
-        _MAX_PARAMETERS_VALUE = input_by_output
+        # IT will select only the largest one
+        if layer_class == self.micro_op and _MICRO_BENCHMARKS_DATA[-1] < micro_op:
+            _MICRO_BENCHMARKS_DATA = [
+                module_input[0].clone().detach(),
+                module_output.clone().detach(),
+                copy.deepcopy(module),
+                self.layer_id,
+                self.name,
+                layer_num_parameters,
+                layer_class,
+                kwargs,
+                save_path,
+                micro_op,
+                input_size
+            ]
+            param_size = 0
+            for param in module.parameters():
+                param_size += param.nelement() * param.element_size()
+            buffer_size = 0
+            for buffer in module.buffers():
+                buffer_size += buffer.nelement() * buffer.element_size()
 
-    # return hook_function_to_extract_layers
+            size_all_mb = (param_size + buffer_size) / 1024**2
+
+            # print(f"input size: {module_input[0].element_size() * module_input[0].numel() / 1024**2 }MB\n" \
+            #       f"output size: {module_output.element_size() * module_output.numel() / 1024**2}MB\n" \
+            #       f"module size: {size_all_mb} MB\n")
+
     def clear(self):
         del self.layer_id, self.name
 
@@ -128,63 +144,71 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
             torch.save(output, save_file)
 
     def compare_inference(self, output, batch_id) -> int:
-        # if self.current_iteration % 7 == 0:
-        #     output[3, 23, 2] *= 34
-        # Make sure that they are on CPU
-        for out_or_gold, tensor in [("out", output), ("gold", self.golden)]:
-            if tensor.is_cuda:
-                dnn_log_helper.log_and_crash(fatal_string=f"Tensor {out_or_gold} not on CPU")
+        ### Fake errors
+        if self.current_iteration % 7 == 0:
+            output[3, 23] *= 34
 
-        # First check if the tensors are equal or not
-        output_errors = 0
-        if common.equal(lhs=output, rhs=self.golden, threshold=self.float_threshold) is False:
-            # no need to continue, we save time
-            output_errors = common.count_errors(lhs=output, rhs=self.golden)
-            # ----------------------------------------------------------------------------------------------------------
-            # Error geometry
-            # error_geometry = self.__get_error_geometry(output_tensor=output)
-            # error_detail_out = f"geometry:{error_geometry} "
-            self.__save_logits(output=output)
-            # ----------------------------------------------------------------------------------------------------------
-            # Data on output tensor
-            has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output)
-            error_detail_out = f"output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
-            # Data on abs differences
-            abs_diff = torch.abs(torch.subtract(output, self.golden))
-            has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
-            error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
-            dnn_log_helper.log_error_detail(error_detail=error_detail_out)
+        # first compare on gpu for fast comparison
+        if common.equal(lhs=output, rhs=self.golden, threshold=self.float_threshold) is True:
+            return 0
 
-            # Dump the file
-            # log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
-            # save_file = f"{log_helper_file}_sdcit_{self.current_iteration}.pt"
-            # torch.save(output, save_file)
-            dnn_log_helper.log_error_count(output_errors)
+        # if there are errors we move to the cpu to compare
+        output = output.to(configs.CPU)
+        self.golden = self.golden.to(configs.CPU)
+
+        output_errors = common.count_errors(lhs=output, rhs=self.golden)
+        # ----------------------------------------------------------------------------------------------------------
+        # Error geometry
+        # error_geometry = self.__get_error_geometry(output_tensor=output)
+        # error_detail_out = f"geometry:{error_geometry} "
+        self.__save_logits(output=output)
+        # ----------------------------------------------------------------------------------------------------------
+        # Data on output tensor
+        has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output)
+        error_detail_out = f"output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
+        # Data on abs differences
+        abs_diff = torch.abs(torch.subtract(output, self.golden))
+        has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
+        error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
+        dnn_log_helper.log_error_detail(error_detail=error_detail_out)
+
+        # Dump the file
+        # log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+        # save_file = f"{log_helper_file}_sdcit_{self.current_iteration}.pt"
+        # torch.save(output, save_file)
+        dnn_log_helper.log_error_count(output_errors)
 
         return output_errors
 
     def __select_the_best_microbenchmark(self):
         del self.model, self.input_list, self.golden
         self.model, self.input_list, self.golden = None, None, None
-        max_num_mac_ops = -1e10
-        for path_tensors in _MICRO_BENCHMARKS_DATA.keys():
-            micro_data = _MICRO_BENCHMARKS_DATA[path_tensors]
-            module_input, module_output, module, layer_id, name, layer_num_parameters, layer_class, kwargs = micro_data
-            # ------------------------------------------------------------
-            # Double check if the re-execution works
-            output_test = module(module_input, **kwargs)
-            assert module_input.is_cuda and next(module.parameters()).is_cuda
-            if common.equal(lhs=output_test, rhs=module_output, threshold=0.0) is False:
-                if self.output_logger:
-                    self.output_logger.error(f"Diff:{torch.sum(torch.abs(torch.subtract(output_test, module_output)))}")
-                raise ValueError("Output tensors not equal")
+
+        (module_input, module_output, module, layer_id, name,
+         layer_num_parameters, layer_class, kwargs, save_path, micro_op, internal_input_size) = _MICRO_BENCHMARKS_DATA
+        assert internal_input_size == module_input.numel(), (f"Inputs size differs:"
+                                                             f"{internal_input_size} != {module_input.numel()}")
+        # max_num_mac_ops = -1e10
+        # for path_tensors in _MICRO_BENCHMARKS_DATA.keys():
+        #     micro_data = _MICRO_BENCHMARKS_DATA[path_tensors]
+        #     module_input, module_output, module, layer_id, name, layer_num_parameters, layer_class
+        #     , kwargs = micro_data
+        # ------------------------------------------------------------
+        # Double check if the re-execution works
+        output_test = module(module_input, **kwargs)
+
+        assert module_input.is_cuda and next(module.parameters()).is_cuda
+        if common.equal(lhs=output_test, rhs=module_output, threshold=0.0) is False:
+            if self.output_logger:
+                self.output_logger.error(f"Diff:{torch.sum(torch.abs(torch.subtract(output_test, module_output)))}")
+            raise ValueError("Output tensors not equal")
             # ------------------------------------------------------------
             # Save the best fit (largest layer)
-            mac_op = layer_num_parameters * module_input.numel()
-            if layer_class == self.micro_op and max_num_mac_ops < mac_op:
-                max_num_mac_ops = mac_op
-                self.model, self.input_list, self.golden, self.kwargs = module, module_input, module_output, kwargs
-                self.best_fit = {"id": layer_id, "name": name, "num_param": layer_num_parameters, "class": layer_class}
+            # mac_op = layer_num_parameters * module_input.numel()
+            # if layer_class == self.micro_op and max_num_mac_ops < mac_op:
+            #     max_num_mac_ops = mac_op
+        self.model, self.input_list, self.golden, self.kwargs = module, module_input, module_output, kwargs
+        self.best_fit = {"id": layer_id, "name": name, "num_param": layer_num_parameters, "class": layer_class}
 
     def _extract_internal_layers_data(self):
         model_copy = copy.deepcopy(self.model)
@@ -192,7 +216,7 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
         handlers = list()
         for layer_id, (name, layer) in enumerate(model_copy.named_modules()):
             if sum(p.numel() for p in layer.parameters()) != 0:
-                hook = LayerSaveHook(layer_id, name)
+                hook = LayerSaveHook(layer_id=layer_id, name=name, micro_op=self.micro_op)
                 handler = layer.register_forward_hook(hook.hook_function_to_extract_layers, with_kwargs=True)
                 handlers.append((handler, hook))
         # Run the actual model for the first batch
@@ -219,13 +243,13 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
 
     def save_setup_data_to_gold_file(self):
         torch.save(
-            obj=[self.golden.to(configs.CPU), self.input_list, self.model, self.best_fit],
+            obj=[self.golden, self.input_list, self.model, self.best_fit],
             f=self.gold_path
         )
 
     @staticmethod
     def copy_to_cpu(dnn_output):
-        return dnn_output.to(configs.CPU)
+        return dnn_output
 
     def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
         errors = 0

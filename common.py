@@ -26,7 +26,7 @@ class Timer:
 
 def equal(lhs: torch.Tensor, rhs: torch.Tensor, threshold: Union[None, float]) -> bool:
     """ Compare based or not in a threshold, if the threshold is none then it is equal comparison    """
-    if threshold is not None:
+    if threshold != 0:
         return bool(
             torch.all(
                 torch.le(

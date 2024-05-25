@@ -50,7 +50,10 @@ def parse_args() -> argparse.Namespace:
 
     # needed for FasterTransformer swin
     parser.add_argument("--cfg", help="Swin Transformer config file", type=str, required=False, default="")
-    parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=0)
+    parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=-1)
+    parser.add_argument("--resume", help="resume from checkpoint", type=str, required=False, default="")
+    parser.add_argument('--int8-mode', type=int, required=False, help='int8 mode', choices=[1, 2])
+    parser.add_argument('--data-path', type=str, help='path to dataset')
 
     parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
                         type=str, required=False, default='')
@@ -85,7 +88,6 @@ def parse_args() -> argparse.Namespace:
         dnn_log_helper.log_and_crash(fatal_string="You must specify a text file with image paths")
 
     return args
-
 
 @torch.no_grad()
 def run_setup(

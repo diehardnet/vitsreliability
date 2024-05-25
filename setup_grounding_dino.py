@@ -37,6 +37,10 @@ class SetupGroundingDINO(SetupBase):
         self.coco_api = None
         self.correctness_threshold = 0.6  # Based on the whole dataset accuracy. Used only for golden generate part
         self.map_list = list()
+        self.nan_inf_list = list()
+        if configs.IMAGENET == args.dataset:  # default one
+            self.dataset = configs.COCO
+
         if args.batchsize != 1:
             raise NotImplementedError("For now, the only batch size allowed is 1")
 
@@ -163,12 +167,21 @@ class SetupGroundingDINO(SetupBase):
             dnn_log_helper.log_info_detail(info_detail=f"LOGITS_AT:{save_file}")
             torch.save(output, save_file)
 
+    @staticmethod
+    def __return_tensor_nans_and_infs(output_tensor) -> tuple:
+        return (
+            torch.sum(torch.isnan(output_tensor)),
+            torch.sum(torch.isinf(output_tensor))
+        )
+
     def compare_inference(self, output: dict, batch_id) -> int:
-        # if self.current_iteration == 8:
-        #     output["pred_logits"] *= 0
+        # if self.current_iteration == 2:
+        #     output["pred_logits"][0, 4] *= 0
+        # self.nan_inf_list[batch_id][1] = (self.nan_inf_list[batch_id][1][0] + 34, self.nan_inf_list[batch_id][1][1])
 
         golden_dict = self.golden[batch_id]
         golden_metrics = self.map_list[batch_id]
+        golden_nan_inf_metrics = self.nan_inf_list[batch_id]
 
         # Make sure that they are on CPU
         for out_or_gold, dict_data in [("out", output), ("gold", golden_dict)]:
@@ -178,9 +191,21 @@ class SetupGroundingDINO(SetupBase):
                         fatal_string=f"Tensor {out_or_gold}-{tensor_type} not on CPU:{tensor.is_cuda}")
 
         # First check if the tensors are equal or not
-        for output_tensor, golden_tensor in zip(output.values(), golden_dict.values()):
-            out_tensor_filtered = torch.nan_to_num(output_tensor, nan=0.0, posinf=0, neginf=0)
-            gld_tensor_filtered = torch.nan_to_num(golden_tensor, nan=0.0, posinf=0, neginf=0)
+        for i, (output_tensor, golden_tensor) in enumerate(zip(output.values(), golden_dict.values())):
+            # print("\n\nTORCHIS INF:", torch.sum(torch.isinf(output_tensor)), torch.sum(torch.isinf(golden_tensor)))
+            output_nan_inf_metrics_i = self.__return_tensor_nans_and_infs(output_tensor=output_tensor)
+            golden_nan_inf_metrics_i = golden_nan_inf_metrics[i]
+            if any([out_naninf != golden_naninf for out_naninf, golden_naninf in
+                    zip(output_nan_inf_metrics_i, golden_nan_inf_metrics_i)]):
+                err_message = f"NaNs/Infs differ:{output_nan_inf_metrics_i} x {golden_nan_inf_metrics_i}"
+                dnn_log_helper.log_error_detail(err_message)
+                if self.output_logger:
+                    self.output_logger.error(err_message)
+                break
+            # Gambiarra to avoid comparison with Infs
+            largest_value = 1e35
+            out_tensor_filtered = torch.nan_to_num(output_tensor, nan=0.0, posinf=largest_value, neginf=-largest_value)
+            gld_tensor_filtered = torch.nan_to_num(golden_tensor, nan=0.0, posinf=largest_value, neginf=-largest_value)
             if common.equal(lhs=out_tensor_filtered, rhs=gld_tensor_filtered, threshold=self.float_threshold) is False:
                 # no need to continue, we save time
                 break
@@ -238,7 +263,7 @@ class SetupGroundingDINO(SetupBase):
         if self.generate is False:
             # Save everything in the same list
             [self.golden, self.input_list, self.gt_targets, self.model, self.input_captions, self.text_encoder_type,
-             self.coco_api, self.map_list] = torch.load(self.gold_path)
+             self.coco_api, self.map_list, self.nan_inf_list] = torch.load(self.gold_path)
         else:
             # The First step is to load the inputs in the memory
             # Load the model
@@ -249,7 +274,8 @@ class SetupGroundingDINO(SetupBase):
     def save_setup_data_to_gold_file(self):
         torch.save(
             obj=[self.golden, self.input_list, self.gt_targets,
-                 self.model, self.input_captions, self.text_encoder_type, self.coco_api, self.map_list],
+                 self.model, self.input_captions, self.text_encoder_type, self.coco_api, self.map_list,
+                 self.nan_inf_list],
             f=self.gold_path
         )
 
@@ -264,5 +290,9 @@ class SetupGroundingDINO(SetupBase):
         else:
             self.golden.append(dnn_output_cpu)
             self.map_list.append(self.get_iou_for_single_image_at_test(output=dnn_output_cpu, batch_id=batch_id))
-
+            new_bathes_nan_inf_counters = list()
+            for tensor_i in dnn_output_cpu.values():
+                new_bathes_nan_inf_counters.append(self.__return_tensor_nans_and_infs(output_tensor=tensor_i))
+                # print(new_bathes_nan_inf_counters[-1])
+            self.nan_inf_list.append(new_bathes_nan_inf_counters)
         return errors
