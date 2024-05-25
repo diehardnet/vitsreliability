@@ -145,8 +145,8 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
 
     def compare_inference(self, output, batch_id) -> int:
         ### Fake errors
-        if self.current_iteration % 7 == 0:
-            output[3, 23] *= 34
+        # if self.current_iteration % 7 == 0:
+        #     output[3, 23] *= 34
 
         # first compare on gpu for fast comparison
         if common.equal(lhs=output, rhs=self.golden, threshold=self.float_threshold) is True:
