@@ -1,14 +1,13 @@
 #!/usr/bin/python3
 import argparse
 import logging
+import os
+import sys
 
 import torch
-import os
 
-import torchvision.datasets.utils
-import console_logger
 import configs
-import sys
+import console_logger
 
 sys.path.extend([
     "/home/carol/vitsreliability/GroundingDINO",
@@ -48,7 +47,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--precision', help="Float precision", choices=configs.ALLOWED_MODEL_PRECISIONS, type=str,
                         required=True, default=configs.FP32)
-    
+
     # needed for FasterTransformer swin
     parser.add_argument("--cfg", help="Swin Transformer config file", type=str, required=False, default="")
     parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=-1)
@@ -61,6 +60,9 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--dataset', help="For some models it's necessary to specify the dataset",
                         type=str, required=False, default=configs.IMAGENET, choices=configs.DATASETS)
+
+    parser.add_argument('--imgspath', help="For custom datasets you must specify a text file with image paths",
+                        type=str, required=False, default='')
 
     parser.add_argument('--floatthreshold', help="Float value threshold to consider a failure",
                         type=float, required=True)
@@ -82,6 +84,9 @@ def parse_args() -> argparse.Namespace:
     if args.generate is True:
         args.iterations = 1
 
+    if args.dataset == configs.CUSTOM_DATASET and args.imgspath == "":
+        dnn_log_helper.log_and_crash(fatal_string="You must specify a text file with image paths")
+
     return args
 
 @torch.no_grad()
@@ -97,7 +102,8 @@ def run_setup(
 
     nvml_wrapper = None
     if args.lognvml:
-        nvml_wrapper = NVMLWrapperThread()
+        nvml_wrapper = NVMLWrapperThread(daemon=True)
+        nvml_wrapper.daemon = True
         nvml_wrapper.start()
 
     # Check if a device is ok and disable grad

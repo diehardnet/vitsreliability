@@ -123,6 +123,7 @@ IMAGENET = "imagenet"
 COCO = "coco"
 CIFAR10 = "cifar10"
 CIFAR100 = "cifar100"
+CUSTOM_DATASET = "custom"
 
 DATASETS = [IMAGENET, COCO, CIFAR100, CIFAR10]
 
@@ -157,11 +158,7 @@ ALLOWED_MODEL_PRECISIONS = [
 
 # Micro benchmarks setup
 ATTENTION, BLOCK, MLP, WINDOW_ATTENTION = 'Attention', 'Block', 'Mlp', 'WindowAttention'
-MICROBENCHMARK_MODULES = [ATTENTION, BLOCK, MLP, WINDOW_ATTENTION]
-
 SWIN_BLOCK = 'SwinTransformerBlock'
-
-ATTENTION, BLOCK, MLP, WINDOW_ATTENTION = 'Attention', 'Block', 'Mlp', 'WindowAttention'
 MICROBENCHMARK_MODULES = [ATTENTION, BLOCK, MLP, WINDOW_ATTENTION, SWIN_BLOCK]
 
 INT8_CKPT_DIR = "/home/int8_ckpts/"

@@ -12,74 +12,84 @@ import configs
 
 CURRENT_DIR = os.getcwd()
 
+GROUNDING_DINO_SAMPLES = 8
+
 # CHECKPOINT, CFG FILE, PRECISIONS, SETUP_TYPE, BATCH SIZE, TEST SAMPLES, hardening types, micro op, log interval
 GROUNDING_DINO_SETUPS = {
     configs.GROUNDING_DINO_SWINT_OGC: (
         configs.GROUNDING_DINO_SWINT_OGC,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-        [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
+        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1
     ),
     configs.GROUNDING_DINO_SWINB_COGCOOR: (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
-        [configs.FP32], configs.GROUNDING_DINO, 1, 8, {None, "hardenedid"}, "Attention", 1
+        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1
     ),
 }
+
+BATCH_SIZE_VITS = 32
+TEST_SAMPLES_VITS = BATCH_SIZE_VITS
+LOG_INTERVAL_VITS = 1
 
 VITS_SETUPS = {
     # The parameter micro op for ViTs is ignored
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
     # setup for ViTs, TODO: add int8 and hardened ID configs
-    # configs.VIT_BASE_PATCH16_224 : (
-    #     configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    # ),
-    # configs.VIT_BASE_PATCH16_384 : (
-    #     configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    # ),
-    # configs.SWIN_BASE_PATCH4_WINDOW7_224 : (
-    #     configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    # ),
-    # configs.SWIN_BASE_PATCH4_WINDOW12_384 : (
-    #     configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    # ),
-    # configs.DEIT_BASE_PATCH16_224 : (
-    #     configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    # ),
-    # configs.DEIT_BASE_PATCH16_384 : (
-    #     configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    # )
-}
-
-VITS_INT8_SETUPS = {
-    configs.SWIN_BASE_PATCH4_WINDOW7_224 : (
-        configs.SWIN_BASE_PATCH4_WINDOW7_224, f"{CURRENT_DIR}/FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization/calib-checkpoint/{configs.SWIN_BASE_PATCH4_WINDOW7_224}_calib.pth", None, [configs.INT8], configs.VITS, 8, 32, {None}, None, 10
+    configs.VIT_BASE_PATCH16_224: (
+        configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
     ),
+    configs.VIT_BASE_PATCH16_384: (
+        configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
+    ),
+    configs.SWIN_BASE_PATCH4_WINDOW7_224: (
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS, {None, "hardenedid"}, None, LOG_INTERVAL_VITS
+    ),
+    configs.SWIN_BASE_PATCH4_WINDOW12_384: (
+        configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS, {None, "hardenedid"}, None, LOG_INTERVAL_VITS
+    ),
+    configs.DEIT_BASE_PATCH16_224: (
+        configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
+    ),
+    configs.DEIT_BASE_PATCH16_384: (
+        configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        TEST_SAMPLES_VITS,
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
+    )
 }
 
-MICRO_BATCHED_SAMPLES = 8
+MICRO_BATCHED_SAMPLES = BATCH_SIZE_VITS
+MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, 100
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, 100
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
-# Change for configure
+# Change for configuring
 SETUPS = dict()
 # SETUPS.update(VITS_SETUPS)
-SETUPS.update(VITS_INT8_SETUPS)
-# SETUPS.update(GROUNDING_DINO_SETUPS)
+SETUPS.update(GROUNDING_DINO_SETUPS)
 # SETUPS.update(MICRO_SETUPS)
 
-LOG_NVML = False
-FLOAT_THRESHOLD = 1e-2
-SAVE_LOGITS = False
+LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
+FLOAT_THRESHOLD = 1e-5
+SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
 
@@ -123,7 +133,7 @@ def configure():
                     cfg_path = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
 
                 parameters = [
-                    "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
+                    # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
                     f"{CURRENT_DIR}/{script_name}",
                     f"--iterations {ITERATIONS}",
                     f"--testsamples {test_samples}",
@@ -161,6 +171,7 @@ def configure():
                 execute_cmd(generate_cmd)
 
     print("Json creation and golden generation finished")
+    print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
 
