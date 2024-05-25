@@ -12,20 +12,20 @@ sys.path.extend([
 # from FasterTransformer.examples.pytorch.swin.SwinTransformerQuantization import quant_utils
 import importlib
 
-# Dynamically import the build_model function
-build_model_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.models')
-build_model = getattr(build_model_module, 'build_model')
-
-# Dynamically import the build_transform function
-build_transform_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.SwinTransformer.data.build')
-build_transform = getattr(build_transform_module, 'build_transform')
-
-# Dynamically import the get_config function
-get_config_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.SwinTransformer.config')
-get_config = getattr(get_config_module, 'get_config')
-
-# Dynamically import the quant_utils module
-quant_utils = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.quant_utils')
+# # Dynamically import the build_model function
+# build_model_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.models')
+# build_model = getattr(build_model_module, 'build_model')
+#
+# # Dynamically import the build_transform function
+# build_transform_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.SwinTransformer.data.build')
+# build_transform = getattr(build_transform_module, 'build_transform')
+#
+# # Dynamically import the get_config function
+# get_config_module = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.SwinTransformer.config')
+# get_config = getattr(get_config_module, 'get_config')
+#
+# # Dynamically import the quant_utils module
+# quant_utils = importlib.import_module('FasterTransformer.examples.pytorch.swin.Swin-Transformer-Quantization.quant_utils')
 
 
 import argparse
@@ -79,66 +79,67 @@ class SetupVits(SetupBaseImageNet):
     def __parse_options(self):
         """ Taken from FasterTransformer/examples/pytorch/swin/SwinTransformerQuantization/main.py
         """
-        parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
-        parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to config file', )
-        parser.add_argument(
-            "--opts",
-            help="Modify config options by adding 'KEY VALUE' pairs. ",
-            default=None,
-            nargs='+',
-        )
-
-        # easy config modification
-        parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
-        parser.add_argument('--data-path', type=str, help='path to dataset')
-        parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
-        parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
-                            help='no: no cache, '
-                                'full: cache all data, '
-                                'part: sharding the dataset into nonoverlapping pieces and only cache one piece')
-        parser.add_argument('--pretrained',
-                            help='pretrained weight from checkpoint, could be imagenet22k pretrained weight')
-        parser.add_argument('--resume', help='resume from checkpoint')
-        parser.add_argument('--accumulation-steps', type=int, help="gradient accumulation steps")
-        parser.add_argument('--use-checkpoint', action='store_true',
-                            help="whether to use gradient checkpointing to save memory")
-        parser.add_argument('--disable_amp', action='store_true', help='Disable pytorch amp')
-        parser.add_argument('--amp-opt-level', type=str, choices=['O0', 'O1', 'O2'],
-                            help='mixed precision opt level, if O0, no amp is used (deprecated!)')
-        parser.add_argument('--output', default='output', type=str, metavar='PATH',
-                            help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
-        parser.add_argument('--tag', help='tag of experiment')
-        parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
-        parser.add_argument('--throughput', action='store_true', help='Test throughput only')
-        parser.add_argument("--engine", type=str, help="The directory of swin tensorrt engine.")
-
-        # Calibration
-        parser.add_argument('--calib', action='store_true', help='Perform calibration only')
-        parser.add_argument('--train', action='store_true', help='Perform training only')
-        parser.add_argument('--int8-mode', type=int, help='int8 mode', choices=[1, 2], default=1)
-        parser.add_argument('--num-calib-batch', type=int, default=4, help='Number of batches for calibration. 0 will disable calibration.')
-        parser.add_argument('--calib-batchsz', type=int, default=8, help='Batch size when doing calibration')
-        parser.add_argument('--calib-output-path', type=str, help='Output directory to save calibrated model')
-        # distributed training
-        parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel', default=-1)
-
-        parser.add_argument("--num-epochs", type=int, default=10, help="Number of epochs to run QAT fintuning.")
-        parser.add_argument("--qat-lr", type=float, default=5e-7, help="learning rate for QAT.")
-        parser.add_argument("--distill", action='store_true', help='Using distillation')
-        parser.add_argument("--teacher", type=str, help='teacher model path')
-        parser.add_argument('--distillation_loss_scale', type=float, default=10000., help="scale applied to distillation component of loss")
-
-        # for acceleration
-        parser.add_argument('--fused_window_process', action='store_true', help='Fused window shift & window partition, similar for reversed part.')
-
-        quant_utils.add_arguments(parser)
-        args, unparsed = parser.parse_known_args()
-        args = quant_utils.set_args(args)
-        quant_utils.set_default_quantizers(args)
-
-        config = get_config(args)
-
-        return args, config
+        pass
+        # parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
+        # parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to config file', )
+        # parser.add_argument(
+        #     "--opts",
+        #     help="Modify config options by adding 'KEY VALUE' pairs. ",
+        #     default=None,
+        #     nargs='+',
+        # )
+        #
+        # # easy config modification
+        # parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
+        # parser.add_argument('--data-path', type=str, help='path to dataset')
+        # parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
+        # parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
+        #                     help='no: no cache, '
+        #                         'full: cache all data, '
+        #                         'part: sharding the dataset into nonoverlapping pieces and only cache one piece')
+        # parser.add_argument('--pretrained',
+        #                     help='pretrained weight from checkpoint, could be imagenet22k pretrained weight')
+        # parser.add_argument('--resume', help='resume from checkpoint')
+        # parser.add_argument('--accumulation-steps', type=int, help="gradient accumulation steps")
+        # parser.add_argument('--use-checkpoint', action='store_true',
+        #                     help="whether to use gradient checkpointing to save memory")
+        # parser.add_argument('--disable_amp', action='store_true', help='Disable pytorch amp')
+        # parser.add_argument('--amp-opt-level', type=str, choices=['O0', 'O1', 'O2'],
+        #                     help='mixed precision opt level, if O0, no amp is used (deprecated!)')
+        # parser.add_argument('--output', default='output', type=str, metavar='PATH',
+        #                     help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
+        # parser.add_argument('--tag', help='tag of experiment')
+        # parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
+        # parser.add_argument('--throughput', action='store_true', help='Test throughput only')
+        # parser.add_argument("--engine", type=str, help="The directory of swin tensorrt engine.")
+        #
+        # # Calibration
+        # parser.add_argument('--calib', action='store_true', help='Perform calibration only')
+        # parser.add_argument('--train', action='store_true', help='Perform training only')
+        # parser.add_argument('--int8-mode', type=int, help='int8 mode', choices=[1, 2], default=1)
+        # parser.add_argument('--num-calib-batch', type=int, default=4, help='Number of batches for calibration. 0 will disable calibration.')
+        # parser.add_argument('--calib-batchsz', type=int, default=8, help='Batch size when doing calibration')
+        # parser.add_argument('--calib-output-path', type=str, help='Output directory to save calibrated model')
+        # # distributed training
+        # parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel', default=-1)
+        #
+        # parser.add_argument("--num-epochs", type=int, default=10, help="Number of epochs to run QAT fintuning.")
+        # parser.add_argument("--qat-lr", type=float, default=5e-7, help="learning rate for QAT.")
+        # parser.add_argument("--distill", action='store_true', help='Using distillation')
+        # parser.add_argument("--teacher", type=str, help='teacher model path')
+        # parser.add_argument('--distillation_loss_scale', type=float, default=10000., help="scale applied to distillation component of loss")
+        #
+        # # for acceleration
+        # parser.add_argument('--fused_window_process', action='store_true', help='Fused window shift & window partition, similar for reversed part.')
+        #
+        # quant_utils.add_arguments(parser)
+        # args, unparsed = parser.parse_known_args()
+        # args = quant_utils.set_args(args)
+        # quant_utils.set_default_quantizers(args)
+        #
+        # config = get_config(args)
+        #
+        # return args, config
 
     def load_model(self) -> None:
         if self.precision is not configs.INT8:
@@ -158,17 +159,17 @@ class SetupVits(SetupBaseImageNet):
         elif self.precision == configs.INT8:
             if self.model_name not in configs.INT8_MODELS:
                 raise ValueError(f"Model {self.model_name} is not supported with PTQ4ViT. Supported models are: {configs.INT8_MODELS}.")
-
-            # config = get_config(self.args)
-            args, config = self.__parse_options()
-            model = build_model(config)
-            # model, test_loader = main()
-            quant_utils.configure_model(model, args, False)
-
-            cp_name = f"{self.model_name}_calib.pth"
-            path = os.path.join(configs.INT8_CKPT_DIR, cp_name)
-            self.__load_checkpoint(model, path)
-            self.transforms = build_transform(False, config)
+            #
+            # # config = get_config(self.args)
+            # args, config = self.__parse_options()
+            # model = build_model(config)
+            # # model, test_loader = main()
+            # quant_utils.configure_model(model, args, False)
+            #
+            # cp_name = f"{self.model_name}_calib.pth"
+            # path = os.path.join(configs.INT8_CKPT_DIR, cp_name)
+            # self.__load_checkpoint(model, path)
+            # self.transforms = build_transform(False, config)
 
         elif self.precision == configs.BFLOAT16:
             raise ValueError("BFLOAT16 is not supported for ViTs")
@@ -189,27 +190,27 @@ class SetupVits(SetupBaseImageNet):
             if self.transforms is None:
                 raise ValueError("First you have to set the set of transforms")
 
-            if self.output_logger:
-                self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
-
-            # random sampler
-            sampler_generator = torch.Generator(device=configs.CPU)
-            sampler_generator.manual_seed(configs.TORCH_SEED)
-
-            test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
-                                                    split='val')
-            subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
-                                                    generator=sampler_generator)
-            test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
-                                                    shuffle=False, pin_memory=True)
-
-            # TODO: it is necessary to save which images are being loaded
-            selected_indices = random.sample(range(len(test_loader)), int(self.test_sample / self.batch_size))
-            for i, (inputs, labels) in enumerate(test_loader):
-                # Only the inputs must be in the device
-                if i in selected_indices:
-                    self.input_list.append(inputs.to("cuda:0"))
-                    self.gt_targets.append(labels)
+            # if self.output_logger:
+            #     self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
+            #
+            # # random sampler
+            # sampler_generator = torch.Generator(device=configs.CPU)
+            # sampler_generator.manual_seed(configs.TORCH_SEED)
+            #
+            # test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
+            #                                         split='val')
+            # subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
+            #                                         generator=sampler_generator)
+            # test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
+            #                                         shuffle=False, pin_memory=True)
+            #
+            # # TODO: it is necessary to save which images are being loaded
+            # selected_indices = random.sample(range(len(test_loader)), int(self.test_sample / self.batch_size))
+            # for i, (inputs, labels) in enumerate(test_loader):
+            #     # Only the inputs must be in the device
+            #     if i in selected_indices:
+            #         self.input_list.append(inputs.to("cuda:0"))
+            #         self.gt_targets.append(labels)
         else:
             super().load_dataset()
             if self.precision == configs.FP16:
