@@ -49,6 +49,18 @@ class LayerSaveHook:
                 micro_op,
                 input_size
             ]
+            param_size = 0
+            for param in module.parameters():
+                param_size += param.nelement() * param.element_size()
+            buffer_size = 0
+            for buffer in module.buffers():
+                buffer_size += buffer.nelement() * buffer.element_size()
+
+            size_all_mb = (param_size + buffer_size) / 1024**2
+
+            # print(f"input size: {module_input[0].element_size() * module_input[0].numel() / 1024**2 }MB\n" \
+            #       f"output size: {module_output.element_size() * module_output.numel() / 1024**2}MB\n" \
+            #       f"module size: {size_all_mb} MB\n")
 
     def clear(self):
         del self.layer_id, self.name
@@ -132,38 +144,39 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
             torch.save(output, save_file)
 
     def compare_inference(self, output, batch_id) -> int:
-        # if self.current_iteration % 7 == 0:
-        #     output[3, 23, 2] *= 34
-        # Make sure that they are on CPU
-        for out_or_gold, tensor in [("out", output), ("gold", self.golden)]:
-            if tensor.is_cuda:
-                dnn_log_helper.log_and_crash(fatal_string=f"Tensor {out_or_gold} not on CPU")
+        ### Fake errors
+        if self.current_iteration % 7 == 0:
+            output[3, 23] *= 34
 
-        # First check if the tensors are equal or not
-        output_errors = 0
-        if common.equal(lhs=output, rhs=self.golden, threshold=self.float_threshold) is False:
-            # no need to continue, we save time
-            output_errors = common.count_errors(lhs=output, rhs=self.golden)
-            # ----------------------------------------------------------------------------------------------------------
-            # Error geometry
-            # error_geometry = self.__get_error_geometry(output_tensor=output)
-            # error_detail_out = f"geometry:{error_geometry} "
-            self.__save_logits(output=output)
-            # ----------------------------------------------------------------------------------------------------------
-            # Data on output tensor
-            has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output)
-            error_detail_out = f"output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
-            # Data on abs differences
-            abs_diff = torch.abs(torch.subtract(output, self.golden))
-            has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
-            error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
-            dnn_log_helper.log_error_detail(error_detail=error_detail_out)
+        # first compare on gpu for fast comparison
+        if common.equal(lhs=output, rhs=self.golden, threshold=self.float_threshold) is True:
+            return 0
 
-            # Dump the file
-            # log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
-            # save_file = f"{log_helper_file}_sdcit_{self.current_iteration}.pt"
-            # torch.save(output, save_file)
-            dnn_log_helper.log_error_count(output_errors)
+        # if there are errors we move to the cpu to compare
+        output = output.to(configs.CPU)
+        self.golden = self.golden.to(configs.CPU)
+
+        output_errors = common.count_errors(lhs=output, rhs=self.golden)
+        # ----------------------------------------------------------------------------------------------------------
+        # Error geometry
+        # error_geometry = self.__get_error_geometry(output_tensor=output)
+        # error_detail_out = f"geometry:{error_geometry} "
+        self.__save_logits(output=output)
+        # ----------------------------------------------------------------------------------------------------------
+        # Data on output tensor
+        has_nan, has_inf, min_val, max_val = common.describe_error(input_tensor=output)
+        error_detail_out = f"output_t nan:{has_nan} inf:{has_inf} min:{min_val} max:{max_val} "
+        # Data on abs differences
+        abs_diff = torch.abs(torch.subtract(output, self.golden))
+        has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
+        error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
+        dnn_log_helper.log_error_detail(error_detail=error_detail_out)
+
+        # Dump the file
+        # log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+        # save_file = f"{log_helper_file}_sdcit_{self.current_iteration}.pt"
+        # torch.save(output, save_file)
+        dnn_log_helper.log_error_count(output_errors)
 
         return output_errors
 
@@ -230,13 +243,13 @@ class SetupViTMicroBenchmarks(SetupBaseImageNet):
 
     def save_setup_data_to_gold_file(self):
         torch.save(
-            obj=[self.golden.to(configs.CPU), self.input_list, self.model, self.best_fit],
+            obj=[self.golden, self.input_list, self.model, self.best_fit],
             f=self.gold_path
         )
 
     @staticmethod
     def copy_to_cpu(dnn_output):
-        return dnn_output.to(configs.CPU)
+        return dnn_output
 
     def post_inference_process(self, dnn_output_cpu, batch_id) -> int:
         errors = 0

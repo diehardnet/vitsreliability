@@ -129,7 +129,6 @@ def run_setup(
             timer.tic()
             dnn_log_helper.start_iteration()
             dnn_output = setup_object(batch_id=batch_id)
-            print(f"[MEMORY] {torch.cuda.memory_allocated(device=None)}B")
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
             dnn_log_helper.end_iteration()
             timer.toc()

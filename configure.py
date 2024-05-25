@@ -68,15 +68,19 @@ VITS_SETUPS = {
     )
 }
 
-MICRO_BATCHED_SAMPLES = BATCH_SIZE_VITS
+MICRO_BATCHED_SAMPLES = 32
 MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
-        configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
+        configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
+    ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
+    **{f"swin_{micro_op}": (
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
         MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
-        configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32], configs.MICROBENCHMARK,
+        configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
         MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
@@ -84,11 +88,11 @@ MICRO_SETUPS = {
 # Change for configuring
 SETUPS = dict()
 # SETUPS.update(VITS_SETUPS)
-SETUPS.update(GROUNDING_DINO_SETUPS)
-# SETUPS.update(MICRO_SETUPS)
+# SETUPS.update(GROUNDING_DINO_SETUPS)
+SETUPS.update(MICRO_SETUPS)
 
 LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
-FLOAT_THRESHOLD = 1e-5
+FLOAT_THRESHOLD = 0
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
