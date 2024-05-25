@@ -4,6 +4,8 @@ import logging
 
 import torch
 import os
+
+import torchvision.datasets.utils
 import console_logger
 import configs
 import sys
@@ -49,7 +51,10 @@ def parse_args() -> argparse.Namespace:
     
     # needed for FasterTransformer swin
     parser.add_argument("--cfg", help="Swin Transformer config file", type=str, required=False, default="")
-    parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=0)
+    parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=-1)
+    parser.add_argument("--resume", help="resume from checkpoint", type=str, required=False, default="")
+    parser.add_argument('--int8-mode', type=int, required=False, help='int8 mode', choices=[1, 2])
+    parser.add_argument('--data-path', type=str, help='path to dataset')
 
     parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
                         type=str, required=False, default='')
@@ -78,7 +83,6 @@ def parse_args() -> argparse.Namespace:
         args.iterations = 1
 
     return args
-
 
 @torch.no_grad()
 def run_setup(
@@ -119,6 +123,7 @@ def run_setup(
             timer.tic()
             dnn_log_helper.start_iteration()
             dnn_output = setup_object(batch_id=batch_id)
+            print(f"[MEMORY] {torch.cuda.memory_allocated(device=None)}B")
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
             dnn_log_helper.end_iteration()
             timer.toc()

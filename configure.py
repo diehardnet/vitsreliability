@@ -32,24 +32,30 @@ VITS_SETUPS = {
     # The parameter micro op for ViTs is ignored
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
     # setup for ViTs, TODO: add int8 and hardened ID configs
-    configs.VIT_BASE_PATCH16_224 : (
-        configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    ),
-    configs.VIT_BASE_PATCH16_384 : (
-        configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    ),
+    # configs.VIT_BASE_PATCH16_224 : (
+    #     configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    # ),
+    # configs.VIT_BASE_PATCH16_384 : (
+    #     configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    # ),
+    # configs.SWIN_BASE_PATCH4_WINDOW7_224 : (
+    #     configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    # ),
+    # configs.SWIN_BASE_PATCH4_WINDOW12_384 : (
+    #     configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    # ),
+    # configs.DEIT_BASE_PATCH16_224 : (
+    #     configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    # ),
+    # configs.DEIT_BASE_PATCH16_384 : (
+    #     configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+    # )
+}
+
+VITS_INT8_SETUPS = {
     configs.SWIN_BASE_PATCH4_WINDOW7_224 : (
-        configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, f"{CURRENT_DIR}/FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization/calib-checkpoint/{configs.SWIN_BASE_PATCH4_WINDOW7_224}_calib.pth", None, [configs.INT8], configs.VITS, 8, 32, {None}, None, 10
     ),
-    configs.SWIN_BASE_PATCH4_WINDOW12_384 : (
-        configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    ),
-    configs.DEIT_BASE_PATCH16_224 : (
-        configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    ),
-    configs.DEIT_BASE_PATCH16_384 : (
-        configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, 8, 32, {None, "hardenedid"}, None, 10
-    )
 }
 
 MICRO_BATCHED_SAMPLES = 8
@@ -66,13 +72,14 @@ MICRO_SETUPS = {
 
 # Change for configure
 SETUPS = dict()
-SETUPS.update(VITS_SETUPS)
-SETUPS.update(GROUNDING_DINO_SETUPS)
-SETUPS.update(MICRO_SETUPS)
+# SETUPS.update(VITS_SETUPS)
+SETUPS.update(VITS_INT8_SETUPS)
+# SETUPS.update(GROUNDING_DINO_SETUPS)
+# SETUPS.update(MICRO_SETUPS)
 
-LOG_NVML = True
+LOG_NVML = False
 FLOAT_THRESHOLD = 1e-2
-SAVE_LOGITS = True
+SAVE_LOGITS = False
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
 
@@ -112,6 +119,8 @@ def configure():
                     configuration_name = f"{dnn_key}_{configuration_name}"
                 json_file_name = f"{jsons_path}/{configuration_name}.json"
                 gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
+                if float_precision == configs.INT8:
+                    cfg_path = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
 
                 parameters = [
                     "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
@@ -130,7 +139,10 @@ def configure():
                     f"--microop {micro_op}" if micro_op else '',
                     f"--{hardening}" if hardening else '',
                     f"--savelogits" if SAVE_LOGITS else '',
-                    f"--lognvml" if LOG_NVML else ''
+                    f"--lognvml" if LOG_NVML else '',
+                    f"--cfg {cfg_path}" if float_precision == configs.INT8 else '',
+                    f"--int8-mode {1}" if float_precision == configs.INT8 else '',
+                    f"--resume {weights_file}" if float_precision == configs.INT8 else '',
                 ]
                 execute_parameters = parameters + ["--disableconsolelog"]
                 command_list = [{
