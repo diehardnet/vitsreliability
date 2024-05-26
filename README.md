@@ -20,7 +20,8 @@ transformers 4.41.0
  addict
  yapf
  pycocotools
- 
+yacs
+ pytorch_quantization
 
  Grouding DINO weights
 
