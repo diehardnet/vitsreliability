@@ -15,18 +15,38 @@ CURRENT_DIR = os.getcwd()
 GROUNDING_DINO_SAMPLES = 8
 
 # CHECKPOINT, CFG FILE, PRECISIONS, SETUP_TYPE, BATCH SIZE, TEST SAMPLES, hardening types, micro op, log interval
+# If GROUDING_DINO_SETUP for JPL images must also include as last parameter "imgspath" and the dataset
 GROUNDING_DINO_SETUPS = {
     configs.GROUNDING_DINO_SWINT_OGC: (
         configs.GROUNDING_DINO_SWINT_OGC,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
-        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1
+        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1,
+        "ignore", configs.COCO
     ),
     configs.GROUNDING_DINO_SWINB_COGCOOR: (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
-        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1
+        [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1,
+        "ignore", configs.COCO
+    ),
+}
+
+GROUNDING_DINO_SETUPS_JPL = {
+    configs.GROUNDING_DINO_SWINT_OGC: (
+        configs.GROUNDING_DINO_SWINT_OGC,
+        f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
+        f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
+        [configs.FP32], configs.GROUNDING_DINO, 1, 0, {None, "hardenedid"}, "Attention", 1,
+        f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET
+    ),
+    configs.GROUNDING_DINO_SWINB_COGCOOR: (
+        configs.GROUNDING_DINO_SWINB_COGCOOR,
+        f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
+        f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
+        [configs.FP32], configs.GROUNDING_DINO, 1, 0, {None, "hardenedid"}, "Attention", 1,
+        f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET
     ),
 }
 
@@ -38,34 +58,16 @@ VITS_SETUPS = {
     # The parameter micro op for ViTs is ignored
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
     # setup for ViTs, TODO: add int8 and hardened ID configs
-    configs.VIT_BASE_PATCH16_224: (
-        configs.VIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+    model_i: (
+        model_i, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
         TEST_SAMPLES_VITS,
-        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
-    ),
-    configs.VIT_BASE_PATCH16_384: (
-        configs.VIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
-        TEST_SAMPLES_VITS,
-        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
-    ),
-    configs.SWIN_BASE_PATCH4_WINDOW7_224: (
-        configs.SWIN_BASE_PATCH4_WINDOW7_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
-        TEST_SAMPLES_VITS, {None, "hardenedid"}, None, LOG_INTERVAL_VITS
-    ),
-    configs.SWIN_BASE_PATCH4_WINDOW12_384: (
-        configs.SWIN_BASE_PATCH4_WINDOW12_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
-        TEST_SAMPLES_VITS, {None, "hardenedid"}, None, LOG_INTERVAL_VITS
-    ),
-    configs.DEIT_BASE_PATCH16_224: (
-        configs.DEIT_BASE_PATCH16_224, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
-        TEST_SAMPLES_VITS,
-        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
-    ),
-    configs.DEIT_BASE_PATCH16_384: (
-        configs.DEIT_BASE_PATCH16_384, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
-        TEST_SAMPLES_VITS,
-        {None, "hardenedid"}, None, LOG_INTERVAL_VITS
-    )
+        {None, "hardenedid"}, None, LOG_INTERVAL_VITS,
+        "ignore", configs.IMAGENET
+    ) for model_i in [
+        configs.VIT_BASE_PATCH16_224, configs.VIT_BASE_PATCH16_384,
+        configs.SWIN_BASE_PATCH4_WINDOW7_224, configs.SWIN_BASE_PATCH4_WINDOW12_384,
+        configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
+    ]
 }
 
 MICRO_BATCHED_SAMPLES = 32
@@ -73,23 +75,24 @@ MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW7_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
 }
 
 # Change for configuring
 SETUPS = dict()
 # SETUPS.update(VITS_SETUPS)
-# SETUPS.update(GROUNDING_DINO_SETUPS)
-SETUPS.update(MICRO_SETUPS)
+SETUPS.update(GROUNDING_DINO_SETUPS)
+# SETUPS.update(GROUNDING_DINO_SETUPS_JPL)
+# SETUPS.update(MICRO_SETUPS)
 
 LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
 FLOAT_THRESHOLD = 0
@@ -124,7 +127,7 @@ def configure():
 
     for dnn_key, dnn_cfg in SETUPS.items():
         (dnn, weights_file, config_file, precisions, setup_type,
-         batch_size, test_samples, hardened, micro_op, log_interval) = dnn_cfg
+         batch_size, test_samples, hardened, micro_op, log_interval, imgs_path, dataset) = dnn_cfg
         for hardening in hardened:
             for float_precision in precisions:
                 configuration_name = f"{dnn}_{float_precision}_{hardening}_"
@@ -133,8 +136,9 @@ def configure():
                     configuration_name = f"{dnn_key}_{configuration_name}"
                 json_file_name = f"{jsons_path}/{configuration_name}.json"
                 gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
-                if float_precision == configs.INT8:
-                    cfg_path = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer-Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
+                # if float_precision == configs.INT8:
+                #     config_file = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer
+                #     -Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
 
                 parameters = [
                     # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
@@ -154,9 +158,11 @@ def configure():
                     f"--{hardening}" if hardening else '',
                     f"--savelogits" if SAVE_LOGITS else '',
                     f"--lognvml" if LOG_NVML else '',
-                    f"--cfg {cfg_path}" if float_precision == configs.INT8 else '',
-                    f"--int8-mode {1}" if float_precision == configs.INT8 else '',
+                    # f"--cfg {cfg_path}" if float_precision == configs.INT8 else '',
+                    # f"--int8-mode {1}" if float_precision == configs.INT8 else '',
                     f"--resume {weights_file}" if float_precision == configs.INT8 else '',
+                    f"--imgspath {imgs_path}",
+                    f"--dataset {dataset}"
                 ]
                 execute_parameters = parameters + ["--disableconsolelog"]
                 command_list = [{

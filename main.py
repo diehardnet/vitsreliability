@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
                         type=str, required=False, default='')
 
     parser.add_argument('--dataset', help="For some models it's necessary to specify the dataset",
-                        type=str, required=False, default=configs.IMAGENET, choices=configs.DATASETS)
+                        type=str, required=True, default=configs.IMAGENET, choices=configs.DATASETS)
 
     parser.add_argument('--imgspath', help="For custom datasets you must specify a text file with image paths",
                         type=str, required=False, default='')
