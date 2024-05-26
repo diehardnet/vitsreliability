@@ -34,14 +34,14 @@ GROUNDING_DINO_SETUPS = {
 }
 
 GROUNDING_DINO_SETUPS_JPL = {
-    configs.GROUNDING_DINO_SWINT_OGC: (
+    "jpl_swint_ogc": (
         configs.GROUNDING_DINO_SWINT_OGC,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
         [configs.FP32], configs.GROUNDING_DINO, 1, 0, {None, "hardenedid"}, "Attention", 1,
         f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET
     ),
-    configs.GROUNDING_DINO_SWINB_COGCOOR: (
+    "jpl_swinb_cogcoor":  (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
