@@ -28,6 +28,7 @@ def search_header(lines: List[str], log):
         "hardenedid": r"(\S+)",
         # "savelogits": r"(\S+)",
         "lognvml": r"(\S+)",
+        "dataset": r"(\S+)",
     }
 
     for line in lines:
