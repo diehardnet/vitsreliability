@@ -7,7 +7,6 @@ import shutil
 
 import numpy
 import torch
-from PIL import Image
 
 import GroundingDINO.groundingdino.datasets.transforms as gdino_transforms
 import common
@@ -24,7 +23,18 @@ from GroundingDINO.groundingdino.util import get_tokenlizer as gdino_get_tokenli
 from GroundingDINO.groundingdino.util.misc import collate_fn as gdino_collate_fn
 from GroundingDINO.groundingdino.util.slconfig import SLConfig as gdino_SLConfig
 from GroundingDINO.groundingdino.util.utils import clean_state_dict as gdino_clean_state_dict
+from GroundingDINO.groundingdino.util.utils import get_phrases_from_posmap as gdino_get_phrases_from_posmap
+
 from setup_base import SetupBase
+
+# For custom datasets
+from GroundingDINO.demo.inference_on_a_image import load_image as gdino_load_image
+from GroundingDINO.demo.inference_on_a_image import plot_boxes_to_image as gdino_plot_boxes_to_image
+
+# from GroundingDINO.demo.inference_on_a_image import get_grounding_output as gddino_get_grounding_output
+
+PLOT_GOLDEN = True
+PIL_IMAGES = list()
 
 
 class SetupGroundingDINO(SetupBase):
@@ -38,9 +48,9 @@ class SetupGroundingDINO(SetupBase):
         self.correctness_threshold = 0.6  # Based on the whole dataset accuracy. Used only for golden generate part
         self.map_list = list()
         self.nan_inf_list = list()
-        if configs.IMAGENET == args.dataset:  # default one
-            self.dataset = configs.COCO
-
+        self.dataset = args.dataset
+        self.input_captions = list()
+        # If multiple batches neither input nor forward will work
         if args.batchsize != 1:
             raise NotImplementedError("For now, the only batch size allowed is 1")
 
@@ -55,6 +65,9 @@ class SetupGroundingDINO(SetupBase):
             pathlib.Path(self.logits_path).mkdir(parents=True, exist_ok=True)
 
     def __call__(self, batch_id, **kwargs):
+        if self.dataset == configs.CUSTOM_DATASET:
+            return self.model(self.input_list[batch_id], captions=self.input_captions[batch_id])
+
         return self.model(self.input_list[batch_id], captions=self.input_captions)
 
     def load_model(self) -> None:
@@ -94,11 +107,11 @@ class SetupGroundingDINO(SetupBase):
             self.coco_api = dataset.coco
 
             # build captions
-            caption = self.input_captions
-            if self.input_captions == '':
-                category_dict = dataset.coco.dataset['categories']
-                cat_list = [item['name'] for item in category_dict]
-                caption = " . ".join(cat_list) + ' .'
+            # caption = self.input_captions
+            # if self.input_captions == '':
+            category_dict = dataset.coco.dataset['categories']
+            cat_list = [item['name'] for item in category_dict]
+            caption = " . ".join(cat_list) + ' .'
 
             # For each image in the batch I'm searching for the COCO classes
             self.input_captions = [caption] * self.batch_size
@@ -108,15 +121,21 @@ class SetupGroundingDINO(SetupBase):
             self.input_list, self.gt_targets = list(), list()
             for i, (inputs, targets) in enumerate(test_loader):
                 # Only the inputs must be in the device
+                # print(inputs.shape)
                 self.input_list.append(inputs.to(configs.GPU_DEVICE))
                 self.gt_targets.append(targets)
         elif self.dataset == configs.CUSTOM_DATASET:
+            global PIL_IMAGES
             with open(self.imgs_file_path, 'r') as f:
                 input_paths = f.readlines()
-            for i, input_image_path in enumerate(input_paths):
-                image_pil = Image.open(input_image_path).convert("RGB")  # load image
-                image, _ = transform(image_pil, None)  # 3, h, w
-                self.input_list.append(image.to(configs.GPU_DEVICE))
+
+            for i, image_line in enumerate(input_paths):
+                input_image_path, queries = image_line.split(";")
+                queries = queries.strip()
+                image_pil, image = gdino_load_image(image_path=input_image_path)
+                PIL_IMAGES.append(image_pil)
+                self.input_captions.append([queries])
+                self.input_list.append(torch.stack([image]).to(configs.GPU_DEVICE))
         else:
             raise NotImplementedError("Dataset not implemented yet")
 
@@ -144,14 +163,21 @@ class SetupGroundingDINO(SetupBase):
         return bbox_stats
 
     def check_dnn_accuracy(self) -> None:
-        evaluator = self.get_coco_evaluator(predicted=self.golden, targets=self.gt_targets)
+        if self.dataset == configs.COCO:
+            evaluator = self.get_coco_evaluator(predicted=self.golden, targets=self.gt_targets)
 
-        if self.output_logger:
-            stats_list = evaluator.coco_eval["bbox"].stats.tolist()
-            correctness = sum(stats_list) / len(stats_list)
-            self.output_logger.debug(f'Final results:{correctness * 100.0:.2f}%')
-            if correctness < self.correctness_threshold:
-                dnn_log_helper.log_and_crash(fatal_string=f"ACCURACY: {correctness * 100.0}%")
+            if self.output_logger:
+                stats_list = evaluator.coco_eval["bbox"].stats.tolist()
+                correctness = sum(stats_list) / len(stats_list)
+                self.output_logger.debug(f'Final results:{correctness * 100.0:.2f}%')
+                if correctness < self.correctness_threshold:
+                    raise ValueError(f"ACCURACY: {correctness * 100.0}%")
+        else:
+            if self.output_logger:
+                if PLOT_GOLDEN:
+                    self.output_logger.debug(f'Check visual accuracy in the data/ path')
+                else:
+                    self.output_logger.debug(f'For custom datasets the dnn accuracy check must be custom made')
 
     def _save_logits(self, output, batch_id):
         total, used, free = shutil.disk_usage("/")
@@ -289,10 +315,98 @@ class SetupGroundingDINO(SetupBase):
             errors = self.compare_inference(output=dnn_output_cpu, batch_id=batch_id)
         else:
             self.golden.append(dnn_output_cpu)
-            self.map_list.append(self.get_iou_for_single_image_at_test(output=dnn_output_cpu, batch_id=batch_id))
+            if self.dataset == configs.COCO:
+                self.map_list.append(self.get_iou_for_single_image_at_test(output=dnn_output_cpu, batch_id=batch_id))
+            elif self.dataset == configs.CUSTOM_DATASET:
+                self.map_list.append(None)
             new_bathes_nan_inf_counters = list()
             for tensor_i in dnn_output_cpu.values():
                 new_bathes_nan_inf_counters.append(self.__return_tensor_nans_and_infs(output_tensor=tensor_i))
                 # print(new_bathes_nan_inf_counters[-1])
             self.nan_inf_list.append(new_bathes_nan_inf_counters)
+
+            plot_golden_batch(outputs=dnn_output_cpu,
+                              tokenlizer=gdino_get_tokenlizer.get_tokenlizer(self.text_encoder_type), batch_id=batch_id,
+                              captions=self.input_captions,
+                              model_name=self.model_name, hardening=self.hardened_model)
+
         return errors
+
+
+def plot_golden_batch(outputs: torch.tensor, tokenlizer, batch_id: int, captions: list, model_name: str,
+                      hardening: str) -> None:
+    if PLOT_GOLDEN is False or not PIL_IMAGES:
+        return
+    image_pil = PIL_IMAGES[batch_id]
+    caption = captions[batch_id][0]
+    boxes_filt, pred_phrases = get_ground_dino_outputs(outputs=outputs, tokenlizer=tokenlizer, caption=caption,
+                                                       box_threshold=0.3, text_threshold=0.25)
+    # visualize pred
+    size = image_pil.size
+    pred_dict = {
+        "boxes": boxes_filt,
+        "size": [size[1], size[0]],  # H,W
+        "labels": pred_phrases,
+    }
+    # import ipdb; ipdb.set_trace()
+    image_with_box = gdino_plot_boxes_to_image(image_pil, pred_dict)[0]
+    img_path = os.path.join("/home/carol/vitsreliability/data/", f"{model_name}_{hardening}_img{batch_id}.jpg")
+    image_with_box.save(img_path)
+
+
+def get_ground_dino_outputs(outputs, tokenlizer, caption, box_threshold, text_threshold):
+    caption = caption.lower()
+    caption = caption.strip()
+    if not caption.endswith("."):
+        caption = caption + "."
+    logits = outputs["pred_logits"].sigmoid()[0]  # (nq, 256)
+    boxes = outputs["pred_boxes"][0]  # (nq, 4)
+
+    # filter output
+    # if token_spans is None:
+    logits_filt = logits.cpu().clone()
+    boxes_filt = boxes.cpu().clone()
+    filt_mask = logits_filt.max(dim=1)[0] > box_threshold
+    logits_filt = logits_filt[filt_mask]  # num_filt, 256
+    boxes_filt = boxes_filt[filt_mask]  # num_filt, 4
+
+    # get phrase
+    # tokenlizer = model.tokenizer
+    tokenized = tokenlizer(caption)
+    # build pred
+    pred_phrases = []
+    for logit, box in zip(logits_filt, boxes_filt):
+        pred_phrase = gdino_get_phrases_from_posmap(logit > text_threshold, tokenized, tokenlizer)
+        # if with_logits:
+        pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
+        # else:
+        #     pred_phrases.append(pred_phrase)
+    # else:
+    # # given-phrase mode
+    # positive_maps = create_positive_map_from_span(
+    #     model.tokenizer(text_prompt),
+    #     token_span=token_spans
+    # ).to(image.device)  # n_phrase, 256
+    #
+    # logits_for_phrases = positive_maps @ logits.T  # n_phrase, nq
+    # all_logits = []
+    # all_phrases = []
+    # all_boxes = []
+    # for (token_span, logit_phr) in zip(token_spans, logits_for_phrases):
+    #     # get phrase
+    #     phrase = ' '.join([caption[_s:_e] for (_s, _e) in token_span])
+    #     # get mask
+    #     filt_mask = logit_phr > box_threshold
+    #     # filt box
+    #     all_boxes.append(boxes[filt_mask])
+    #     # filt logits
+    #     all_logits.append(logit_phr[filt_mask])
+    #     if with_logits:
+    #         logit_phr_num = logit_phr[filt_mask]
+    #         all_phrases.extend([phrase + f"({str(logit.item())[:4]})" for logit in logit_phr_num])
+    #     else:
+    #         all_phrases.extend([phrase for _ in range(len(filt_mask))])
+    # boxes_filt = torch.cat(all_boxes, dim=0).cpu()
+    # pred_phrases = all_phrases
+
+    return boxes_filt, pred_phrases

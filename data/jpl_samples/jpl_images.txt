@@ -1,0 +1,6 @@
+/home/carol/vitsreliability/data/jpl_samples/46092_PIA24648.webp.png;drone . rock .
+/home/carol/vitsreliability/data/jpl_samples/46093_PIA24647.webp.png;drone .
+/home/carol/vitsreliability/data/jpl_samples/47229_PIA25213-1.webp.png;drone . rock .
+/home/carol/vitsreliability/data/jpl_samples/47872_PIA25663.png;wheel .
+/home/carol/vitsreliability/data/jpl_samples/48167_PIA25881.webp.png;chopper .
+/home/carol/vitsreliability/data/jpl_samples/48642_PIA26202-3.webp.png;vehicle . rock .
