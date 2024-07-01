@@ -173,3 +173,13 @@ RANDOM_INT_LIMIT = 65535
 # range for random generation
 GENERATOR_MAX_ABS_VALUE_GEMM = 10
 GENERATOR_MIN_ABS_VALUE_GEMM = -GENERATOR_MAX_ABS_VALUE_GEMM
+
+# EM Jetson Nano related
+TEMP_FILES = {
+    "CPU": "/sys/devices/virtual/thermal/thermal_zone0/temp",
+    "GPU": "/sys/devices/virtual/thermal/thermal_zone1/temp",
+    "SOC0": "/sys/devices/virtual/thermal/thermal_zone5/temp",
+    "SOC1": "/sys/devices/virtual/thermal/thermal_zone6/temp",
+    "SOC2": "/sys/devices/virtual/thermal/thermal_zone7/temp",
+    "TJ": "/sys/devices/virtual/thermal/thermal_zone8/temp",
+}

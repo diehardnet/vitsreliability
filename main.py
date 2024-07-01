@@ -9,6 +9,8 @@ import torch
 import configs
 import console_logger
 
+import datetime
+
 sys.path.extend([
     "/home/carol/vitsreliability/GroundingDINO",
     "/home/carol/vitsreliability/FasterTransformer",
@@ -203,6 +205,10 @@ def run_setup_em(
         terminal_logger.debug("\n".join(f"{k}:{v}" for k, v in args_dict.items()))
         terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
 
+    date = datetime.datetime.now()
+    temperatures = []
+    temperatures_csv = f"{date.year}_{date.month}_{date.day}_{date.hour}_{date.minute}_{date.second}_temperatures.csv"
+
     # Main setup loop
     while setup_object.is_setup_active:
         # Loop over the input list
@@ -212,6 +218,8 @@ def run_setup_em(
             dnn_log_helper.start_iteration()
             dnn_output = setup_object(batch_id=batch_id)
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
+            temp_measure = common.measure_jetson_temp(temperatures_csv, setup_object.matrix_size)
+            temperatures.append(temp_measure)
             dnn_log_helper.end_iteration()
             timer.toc()
             kernel_time = timer.diff_time
