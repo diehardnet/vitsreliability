@@ -218,7 +218,7 @@ def run_setup_em(
             dnn_log_helper.start_iteration()
             dnn_output = setup_object(batch_id=batch_id)
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
-            temp_measure = common.measure_jetson_temp(temperatures_csv, setup_object.matrix_size)
+            temp_measure = common.measure_jetson_temp(temperatures_csv, setup_object.size)
             temperatures.append(temp_measure)
             dnn_log_helper.end_iteration()
             timer.toc()
