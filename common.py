@@ -88,7 +88,7 @@ def get_top_k_labels_classification(input_tensor: torch.tensor, top_k: int, dim:
 
 def measure_jetson_temp(file_path, matrix_size):
     data = []
-    for dev, file in configs.TEMP_FILES:
+    for dev, file in configs.TEMP_FILES.items():
         with open(file, "+r") as f:
             temp = int(f.readlines())
             vals = {
