@@ -208,6 +208,11 @@ def run_setup_em(
     date = datetime.datetime.now()
     temperatures = []
     temperatures_csv = f"{date.year}_{date.month}_{date.day}_{date.hour}_{date.minute}_{date.second}_temperatures.csv"
+    temps_csv_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), configs.TEMP_RECORDS_PATH)
+    if not os.path.isdir(temps_csv_path):
+        os.mkdir(temps_csv_path)
+
+    temps_csv_path = os.path.join(temps_csv_path, temperatures_csv)
 
     # Main setup loop
     while setup_object.is_setup_active:
@@ -218,7 +223,7 @@ def run_setup_em(
             dnn_log_helper.start_iteration()
             dnn_output = setup_object(batch_id=batch_id)
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
-            temp_measure = common.measure_jetson_temp(temperatures_csv, setup_object.size)
+            temp_measure = common.measure_jetson_temp(temps_csv_path, setup_object.size)
             temperatures.append(temp_measure)
             dnn_log_helper.end_iteration()
             timer.toc()

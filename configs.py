@@ -183,3 +183,5 @@ TEMP_FILES = {
     "SOC2": "/sys/devices/virtual/thermal/thermal_zone7/temp",
     "TJ": "/sys/devices/virtual/thermal/thermal_zone8/temp",
 }
+
+TEMP_RECORDS_PATH = "data/temperatures/"
