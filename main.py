@@ -11,6 +11,8 @@ import console_logger
 
 import datetime
 
+import Jetson.GPIO as GPIO
+
 sys.path.extend([
     "/home/carol/vitsreliability/GroundingDINO",
     "/home/carol/vitsreliability/FasterTransformer",
@@ -22,11 +24,6 @@ import dnn_log_helper
 import common
 from setup_base import SetupBase
 from nvml_wrapper import NVMLWrapperThread
-
-import em_configs 
-from benches.code.generators import AVRK4
-from benches.code.helpers import ip_connection
-import pint
 
 def parse_args() -> argparse.Namespace:
     """ Parse the args and return an args namespace and the tostring from the args    """
@@ -217,6 +214,10 @@ def run_setup_em(
         os.mkdir(temps_csv_path)
 
     temps_csv_path = os.path.join(temps_csv_path, temperatures_csv)
+    
+    OUTPUT_PIN = 18
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(OUTPUT_PIN, GPIO.OUT, initial=GPIO.LOW)
 
     # Main setup loop
     while setup_object.is_setup_active:
@@ -225,10 +226,12 @@ def run_setup_em(
         while batch_id < setup_object.num_batches:
             timer.tic()
             dnn_log_helper.start_iteration()
-            avrk4.activate()
+
+            GPIO.output(OUTPUT_PIN, GPIO.HIGH) # Start the EM pulse
             dnn_output = setup_object(batch_id=batch_id)
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
-            avrk4.shutdown()
+            GPIO.output(OUTPUT_PIN, GPIO.LOW) # End the EM pulse
+
             temp_measure = common.measure_jetson_temp(temps_csv_path, setup_object.size)
             temperatures.append(temp_measure)
             dnn_log_helper.end_iteration()
