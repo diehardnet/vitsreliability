@@ -206,7 +206,10 @@ def configure_gemm():
                     gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
 
                     parameters = [
-                        # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
+                        'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                        'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
+                        "PATH=/usr/local/cuda-12/bin:$PATH",
+                        "CUDA_HOME=/usr/local/cuda-12",
                         f"{CURRENT_DIR}/{script_name}",
                         f"--fi_type {fi}",
                         f"--iterations {ITERATIONS}",

@@ -23,6 +23,10 @@ import common
 from setup_base import SetupBase
 from nvml_wrapper import NVMLWrapperThread
 
+import em_configs 
+from benches.code.generators import AVRK4
+from benches.code.helpers import ip_connection
+import pint
 
 def parse_args() -> argparse.Namespace:
     """ Parse the args and return an args namespace and the tostring from the args    """
@@ -78,7 +82,6 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--model', help="Model name", choices=configs.ALL_POSSIBLE_MODELS, type=str, required=True)
 
-    # EM RELATED ARGS
     parser.add_argument('--matrix_size', type=int, help='Matrix size for GEMM setup', default=1024)
 
     args = parser.parse_args()
@@ -184,6 +187,7 @@ def run_setup_em(
                     activate_logging=not args.generate, **args_dict)
     dnn_log_helper.start_setup_log_file(**log_args)
 
+    dnn_log_helper.info("EM parameters set")
     nvml_wrapper = None
     if args.lognvml:
         nvml_wrapper = NVMLWrapperThread(daemon=True)
@@ -221,8 +225,10 @@ def run_setup_em(
         while batch_id < setup_object.num_batches:
             timer.tic()
             dnn_log_helper.start_iteration()
+            avrk4.activate()
             dnn_output = setup_object(batch_id=batch_id)
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
+            avrk4.shutdown()
             temp_measure = common.measure_jetson_temp(temps_csv_path, setup_object.size)
             temperatures.append(temp_measure)
             dnn_log_helper.end_iteration()
