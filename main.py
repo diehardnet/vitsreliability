@@ -184,7 +184,6 @@ def run_setup_em(
                     activate_logging=not args.generate, **args_dict)
     dnn_log_helper.start_setup_log_file(**log_args)
 
-    dnn_log_helper.info("EM parameters set")
     nvml_wrapper = None
     if args.lognvml:
         nvml_wrapper = NVMLWrapperThread(daemon=True)
