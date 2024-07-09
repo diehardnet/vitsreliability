@@ -25,10 +25,10 @@ assert JETSON_IP != "192.168.1.1", "Dummy ip not allowed, change for experiment"
 
 SERVER_IP = "192.168.0.5"
 SERVER_PORT = 1024
-SERVER_LOG_FILE = "em_server.log"
 
 PARENT_LOGGER_NAME = "em_server"
 LOG_PATH = "/home/lucas/Documents/vitsreliability/logs/em_logs/"
+SERVER_LOG_FILE = "/home/lucas/Documents/vitsreliability/logs/em_logs/server.log"
 
 GEMM_1024, GEMM_2048, GEMM_4096, GEMM_8192 = "GEMM_1024", "GEMM_2048", "GEMM_4096", "GEMM_8192"
 GEMMS = [GEMM_1024, GEMM_2048, GEMM_4096, GEMM_8192]
@@ -107,6 +107,8 @@ def main():
                 amplitude = pint.Quantity(amp_val, ureg.volt)
                 avrk4.set_amplitude(amplitude)
                 try:
+                    command += f" --delay {delay} --amplitude {amp_val}"
+                    machine_config["header"] = command
                     machine = Machine(machine_config, SERVER_IP, PARENT_LOGGER_NAME, LOG_PATH)
                     machine.daemon = True
                     machine.start()
