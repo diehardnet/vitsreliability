@@ -178,7 +178,12 @@ class Machine(threading.Thread):
         self.__messages_socket.bind((server_ip, self.__receiving_port))
         self.__messages_socket.settimeout(self.__max_timeout_time)
 
-        super(Machine, self).__init__(*args, **kwargs) 
+        super(Machine, self).__init__(*args, **kwargs)
+
+    def __str__(self) -> str:
+        dut_str = f"IP:{self.__dut_ip} USERNAME:{self.__dut_username} "
+        dut_str += f"HOSTNAME:{self.__dut_hostname} RECPORT:{self.__receiving_port}"
+        return dut_str
 
     def run(self) -> None:
         self.__dut_logging_obj = DUTLogging(log_dir=self.__dut_log_path, test_name=self.__test_name, test_header=self.__test_header, hostname=self.__dut_hostname,
