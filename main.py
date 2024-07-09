@@ -81,6 +81,9 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--matrix_size', type=int, help='Matrix size for GEMM setup', default=1024)
 
+    parser.add_argument('--amplitude', type=int, help='Amplitude for EM setup (V)', default=-60)
+    parser.add_argument('--delay', type=int, help='Delay for EM setup (ns)', default=100)
+
     args = parser.parse_args()
 
     if args.testsamples % args.batchsize != 0:
