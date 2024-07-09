@@ -64,9 +64,9 @@ VITS_SETUPS = {
         {None, "hardenedid"}, None, LOG_INTERVAL_VITS,
         "ignore", configs.IMAGENET
     ) for model_i in [
-        configs.VIT_BASE_PATCH16_224, configs.VIT_BASE_PATCH16_384,
-        configs.SWIN_BASE_PATCH4_WINDOW7_224, configs.SWIN_BASE_PATCH4_WINDOW12_384,
-        configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
+        configs.VIT_BASE_PATCH16_224, configs.SWIN_BASE_PATCH4_WINDOW7_224,
+        # configs.VIT_BASE_PATCH16_384, configs.SWIN_BASE_PATCH4_WINDOW12_384,
+        # configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
     ]
 }
 
@@ -97,7 +97,7 @@ GEMM_SETUPS = {
 
 # Change for configuring
 SETUPS = dict()
-# SETUPS.update(VITS_SETUPS)
+SETUPS.update(VITS_SETUPS)
 # SETUPS.update(GROUNDING_DINO_SETUPS)
 # SETUPS.update(GROUNDING_DINO_SETUPS_JPL)
 # SETUPS.update(MICRO_SETUPS)
@@ -150,6 +150,10 @@ def configure():
 
                 parameters = [
                     # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
+                    'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                    'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
+                    "PATH=/usr/local/cuda-12/bin:$PATH",
+                    "CUDA_HOME=/usr/local/cuda-12",
                     f"{CURRENT_DIR}/{script_name}",
                     f"--iterations {ITERATIONS}",
                     f"--testsamples {test_samples}",
