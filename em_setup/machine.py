@@ -57,7 +57,7 @@ class DUTLogging:
     each device used to perform in the past.
     """
 
-    def __init__(self, log_dir: str, test_name: str, test_header: str, hostname: str, logger_name: str):
+    def __init__(self, log_dir: str, test_name: str, test_header: str, hostname: str, logger_name: str, *args, **kwargs):
         """ DUTLogging create the log file and writes the header on the first line
         :param log_dir: directory of the logfile
         :param test_name: Name of the test that will be performed, ex: cuda_lava_fp16, zedboard_lenet_int8, etc.

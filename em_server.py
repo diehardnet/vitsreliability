@@ -11,6 +11,8 @@ import em_setup.fake_avrk4 as AVRK4
 # from benches.code.generators import AVRK4
 from benches.code.helpers import ip_connection
 
+THREAD_JOIN_TIMEOUT: float = 1.0
+
 JETSON_IP = "192.168.1.1" # FIXME: Change for experiment
 JETSON_USER = "lucas"
 JETSON_PASSWORD = "qwerty0" # FIXME: Change for experiment
@@ -74,8 +76,6 @@ def main():
         "header": command,
         "test_name": test_name,
     }
-    machine = Machine(machine_config, SERVER_IP, PARENT_LOGGER_NAME, LOG_PATH)
-    machine.start()
 
     try:
         for delay in em_configs.EM_DELAY_RANGE:
@@ -85,11 +85,19 @@ def main():
             for amp_val in em_configs.EM_AMPLITUDE_RANGE:
                 amplitude = pint.Quantity(amp_val, ureg.volt)
                 avrk4.set_amplitude(amplitude)
-                run_command(command, ssh_client)
+                try:
+                    machine = Machine(machine_config, SERVER_IP, PARENT_LOGGER_NAME, LOG_PATH)
+                    machine.daemon = True
+                    machine.start()
+                    print(f" [+] Running with delay={delay}ns and amplitude={amp_val}V")
+                    run_command(command, ssh_client)
+                except KeyboardInterrupt:
+                    # machine.stop()
+                    # machine.join(timeout=THREAD_JOIN_TIMEOUT)
+                    run_command(kill_command, ssh_client)
+                    continue
     finally:
-        run_command(kill_command, ssh_client)
         ssh_client.close()
-        machine.stop()
 
     
 
