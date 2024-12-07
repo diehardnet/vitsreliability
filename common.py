@@ -4,7 +4,8 @@ from typing import Union, Tuple
 import torch
 import dnn_log_helper
 import configs
-
+import pandas as pd
+import os
 
 class Timer:
     time_measure = 0
@@ -84,3 +85,20 @@ def get_top_k_labels_classification(input_tensor: torch.tensor, top_k: int, dim:
     # Apply softmax to get predicted probabilities for each class
     probabilities = torch.nn.functional.softmax(input_tensor, dim=dim)
     return torch.topk(probabilities, k=top_k, dim=dim).indices.squeeze(0)
+
+def measure_jetson_temp(file_path, matrix_size):
+    data = []
+    for dev, file in configs.TEMP_FILES.items():
+        with open(file, "r") as f:
+            temp = int(f.readline())
+            vals = {
+                "time": time.time(),
+                "device": dev,
+                "temp": temp,
+                "matrix_size": matrix_size,
+            }
+        
+        data.append(vals)
+
+    df = pd.DataFrame.from_records(data=data)
+    df.to_csv(file_path, mode='a', header=(not os.path.exists(file_path)), index=False)

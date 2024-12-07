@@ -9,6 +9,10 @@ import torch
 import configs
 import console_logger
 
+import datetime
+
+import Jetson.GPIO as GPIO
+
 sys.path.extend([
     "/home/carol/vitsreliability/GroundingDINO",
     "/home/carol/vitsreliability/FasterTransformer",
@@ -20,7 +24,6 @@ import dnn_log_helper
 import common
 from setup_base import SetupBase
 from nvml_wrapper import NVMLWrapperThread
-
 
 def parse_args() -> argparse.Namespace:
     """ Parse the args and return an args namespace and the tostring from the args    """
@@ -38,6 +41,7 @@ def parse_args() -> argparse.Namespace:
                         help="Disable or enable HardenedIdentity. Work only for the profiled models.")
 
     parser.add_argument('--setup_type', help="Setup type", choices=configs.ALL_SETUP_TYPES, type=str, required=True)
+    parser.add_argument('--fi_type', help="Fault Injection type", choices=configs.ALL_INJECTION_TYPES, type=str, default=configs.NEUTRONS)
 
     parser.add_argument('--microop', help="Which micro bench is to be tested", choices=configs.MICROBENCHMARK_MODULES,
                         type=str, required=False)
@@ -74,6 +78,11 @@ def parse_args() -> argparse.Namespace:
                         action="store_true", required=False)
 
     parser.add_argument('--model', help="Model name", choices=configs.ALL_POSSIBLE_MODELS, type=str, required=True)
+
+    parser.add_argument('--matrix_size', type=int, help='Matrix size for GEMM setup', default=1024)
+
+    parser.add_argument('--amplitude', type=int, help='Amplitude for EM setup (V)', default=-60)
+    parser.add_argument('--delay', type=int, help='Delay for EM setup (ns)', default=100)
 
     args = parser.parse_args()
 
@@ -167,6 +176,101 @@ def run_setup(
 
     dnn_log_helper.end_log_file()
 
+@torch.no_grad()
+def run_setup_em(
+        args: argparse.Namespace,
+        setup_object: SetupBase,
+        terminal_logger: logging.Logger
+):
+    args_dict = vars(args)
+    log_args = dict(framework_name="PyTorch", torch_version=torch.__version__, gpu=torch.cuda.get_device_name(),
+                    activate_logging=not args.generate, **args_dict)
+    dnn_log_helper.start_setup_log_file(**log_args)
+
+    nvml_wrapper = None
+    if args.lognvml:
+        nvml_wrapper = NVMLWrapperThread(daemon=True)
+        nvml_wrapper.daemon = True
+        nvml_wrapper.start()
+
+    # Check if a device is ok and disable grad
+    common.check_and_setup_gpu()
+
+    # Defining a timer
+    timer = common.Timer()
+    # Load if it is not a gold generating op
+    timer.tic()
+    setup_object.load_data_at_test()
+    timer.toc()
+    golden_load_diff_time = timer.diff_time_str
+
+    if terminal_logger:
+        terminal_logger.debug("\n".join(f"{k}:{v}" for k, v in args_dict.items()))
+        terminal_logger.debug(f"Time necessary to load the golden outputs, model, and inputs: {golden_load_diff_time}")
+
+    date = datetime.datetime.now()
+    temperatures = []
+    temperatures_csv = f"{date.year}_{date.month}_{date.day}_{date.hour}_{date.minute}_{date.second}_temperatures.csv"
+    temps_csv_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), configs.TEMP_RECORDS_PATH)
+    if not os.path.isdir(temps_csv_path):
+        os.mkdir(temps_csv_path)
+
+    temps_csv_path = os.path.join(temps_csv_path, temperatures_csv)
+    
+    OUTPUT_PIN = 18
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(OUTPUT_PIN, GPIO.OUT, initial=GPIO.LOW)
+
+    # Main setup loop
+    while setup_object.is_setup_active:
+        # Loop over the input list
+        batch_id = 0  # It must be like this, because I may reload the list in the middle of the process
+        while batch_id < setup_object.num_batches:
+            timer.tic()
+            dnn_log_helper.start_iteration()
+
+            GPIO.output(OUTPUT_PIN, GPIO.HIGH) # Start the EM pulse
+            dnn_output = setup_object(batch_id=batch_id)
+            torch.cuda.synchronize(device=configs.GPU_DEVICE)
+            GPIO.output(OUTPUT_PIN, GPIO.LOW) # End the EM pulse
+
+            temp_measure = common.measure_jetson_temp(temps_csv_path, setup_object.size)
+            temperatures.append(temp_measure)
+            dnn_log_helper.end_iteration()
+            timer.toc()
+            kernel_time = timer.diff_time
+            # Always copy to CPU
+            timer.tic()
+            dnn_output_cpu = setup_object.copy_to_cpu(dnn_output=dnn_output)
+            timer.toc()
+            copy_to_cpu_time = timer.diff_time
+            # Then compare the golden with the output
+            timer.tic()
+            # If generate errors==0, otherwise it will compare the output
+            errors = setup_object.post_inference_process(dnn_output_cpu=dnn_output_cpu, batch_id=batch_id)
+            timer.toc()
+            comparison_time = timer.diff_time
+
+            # Reload all the memories after error
+            if errors != 0:
+                setup_object.clear_gpu_memory_and_reload()
+
+            # Printing timing information
+            setup_object.print_setup_iteration(batch_id=batch_id, comparison_time=comparison_time,
+                                               copy_to_cpu_time=copy_to_cpu_time, errors=errors,
+                                               kernel_time=kernel_time)
+            batch_id += 1
+
+    if setup_object.generate:
+        setup_object.save_setup_data_to_gold_file()
+
+    if terminal_logger:
+        terminal_logger.debug("Finish computation.")
+
+    if args.lognvml:
+        nvml_wrapper.join()
+
+    dnn_log_helper.end_log_file()
 
 def main():
     args = parse_args()
@@ -187,10 +291,19 @@ def main():
     elif args.setup_type == configs.MICROBENCHMARK:
         from setup_microbenchmarks import SetupViTMicroBenchmarks
         setup_object = SetupViTMicroBenchmarks(args=args, output_logger=terminal_logger)
+    elif args.setup_type == configs.GEMM:
+        from setup_gemm import SetupGEMM
+        setup_object = SetupGEMM(args=args, output_logger=terminal_logger)
     else:
         dnn_log_helper.log_and_crash(fatal_string=f"Code type {args.code_type} not implemented")
 
-    run_setup(args=args, setup_object=setup_object, terminal_logger=terminal_logger)
+    if args.fi_type == configs.NEUTRONS:
+        run_setup(args=args, setup_object=setup_object, terminal_logger=terminal_logger)
+    elif args.fi_type == configs.EM:
+        run_setup_em(args=args, setup_object=setup_object, terminal_logger=terminal_logger)
+        # raise NotImplementedError("EM is not implemented yet")
+    else:
+        dnn_log_helper.log_and_crash(fatal_string=f"FI type {args.fi_type} not implemented")
 
 
 if __name__ == '__main__':

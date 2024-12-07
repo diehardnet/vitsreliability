@@ -64,9 +64,9 @@ VITS_SETUPS = {
         {None, "hardenedid"}, None, LOG_INTERVAL_VITS,
         "ignore", configs.IMAGENET
     ) for model_i in [
-        configs.VIT_BASE_PATCH16_224, configs.VIT_BASE_PATCH16_384,
-        configs.SWIN_BASE_PATCH4_WINDOW7_224, configs.SWIN_BASE_PATCH4_WINDOW12_384,
-        configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
+        configs.VIT_BASE_PATCH16_224, configs.SWIN_BASE_PATCH4_WINDOW7_224,
+        # configs.VIT_BASE_PATCH16_384, configs.SWIN_BASE_PATCH4_WINDOW12_384,
+        # configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
     ]
 }
 
@@ -84,13 +84,21 @@ MICRO_SETUPS = {
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
         MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
-    ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]}
+    ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]},
+    **{f"vit_{micro_op}": (
+        configs.VIT_BASE_PATCH16_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
+    ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]},
+}
+
+GEMM_SETUPS = {
+    "gemm": ([1024, 2048, 4096, 8192], [configs.FP32], configs.GEMM, 5, [configs.EM])
 }
 
 # Change for configuring
 SETUPS = dict()
-# SETUPS.update(VITS_SETUPS)
-SETUPS.update(GROUNDING_DINO_SETUPS)
+SETUPS.update(VITS_SETUPS)
+# SETUPS.update(GROUNDING_DINO_SETUPS)
 # SETUPS.update(GROUNDING_DINO_SETUPS_JPL)
 # SETUPS.update(MICRO_SETUPS)
 
@@ -142,6 +150,10 @@ def configure():
 
                 parameters = [
                     # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
+                    'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                    'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
+                    "PATH=/usr/local/cuda-12/bin:$PATH",
+                    "CUDA_HOME=/usr/local/cuda-12",
                     f"{CURRENT_DIR}/{script_name}",
                     f"--iterations {ITERATIONS}",
                     f"--testsamples {test_samples}",
@@ -184,6 +196,55 @@ def configure():
     print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
+def configure_gemm():
+    home, jsons_path, server_ip = general_configure()
+    script_name = "main.py"
+
+    for gemm_key, gemm_cfg in GEMM_SETUPS.items():
+        (sizes, precisions, setup_type, log_interval, fi_type) = gemm_cfg
+        for size in sizes:
+            for float_precision in precisions:
+                for fi in fi_type:
+                    configuration_name = f"GEMM_{size}_{float_precision}"
+                    json_file_name = f"{jsons_path}/{configuration_name}.json"
+                    gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
+
+                    parameters = [
+                        'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                        'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
+                        "PATH=/usr/local/cuda-12/bin:$PATH",
+                        "CUDA_HOME=/usr/local/cuda-12",
+                        f"{CURRENT_DIR}/{script_name}",
+                        f"--fi_type {fi}",
+                        f"--iterations {ITERATIONS}",
+                        f"--goldpath {gold_path}",
+                        f"--setup_type {setup_type}",
+                        f"--floatthreshold {FLOAT_THRESHOLD}",
+                        f"--loghelperinterval {log_interval}",
+                        f"--precision {float_precision}",
+                        f"--matrix_size {size}",
+                        f"--model {configs.GEMM}",
+                        f"--dataset {configs.GEMM}",
+                    ]
+                    execute_parameters = parameters + ["--disableconsolelog"]
+                    command_list = [{
+                        "killcmd": f"pkill -9 -f {script_name}",
+                        "exec": " ".join(execute_parameters),
+                        "codename": configuration_name,
+                        "header": " ".join(execute_parameters)
+                    }]
+
+                    generate_cmd = " ".join(parameters + ["--generate"])
+                    # dump json
+                    with open(json_file_name, "w") as json_fp:
+                        json.dump(obj=command_list, fp=json_fp, indent=4)
+
+                    print(f"Executing generate for {generate_cmd}")
+                    execute_cmd(generate_cmd)
+
+    print("Json creation and golden generation finished")
+    print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
+    print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
 def test_all_jsons(enable_console_logging, timeout=30):
     hostname = gethostname()
@@ -210,6 +271,8 @@ def main():
                         help="How many seconds to test the jsons, if 0 (default) it does the configure", type=int)
     parser.add_argument('--enableconsole', default=False, action="store_true",
                         help="Enable console logging for testing")
+    parser.add_argument('--gemm', default=False, action="store_true",
+                        help="Enable GEMM testing")
 
     args = parser.parse_args()
 
@@ -217,6 +280,8 @@ def main():
         test_all_jsons(enable_console_logging=args.enableconsole, timeout=args.testjsons)
     else:
         configure()
+        if args.gemm:
+            configure_gemm()
 
 
 if __name__ == "__main__":

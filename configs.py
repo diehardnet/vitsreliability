@@ -10,6 +10,18 @@ CLASSIFICATION_CRITICAL_TOP_K = 1
 GPU_DEVICE = "cuda:0"
 CPU = "cpu"
 
+# INJECTION TYPES
+EM, NEUTRONS = "em", "neutrons"
+ALL_INJECTION_TYPES = [EM, NEUTRONS]
+
+# code types that can be evaluated
+GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS, GEMM = "grounding_dino", "maximals", "selective_ecc", "vits", "gemm"
+MICROBENCHMARK = "microbenchmark"
+
+ALL_SETUP_TYPES = [
+    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS, MICROBENCHMARK, GEMM
+]
+
 # Classification CNNs
 RESNET50D_IMAGENET_TIMM = "resnet50d"
 EFFICIENTNET_B7_TIMM = "tf_efficientnet_b7"
@@ -114,7 +126,7 @@ VITS_MULTIMODAL_CONFIGS = [
     GROUNDING_DINO_SWINB_COGCOOR
 ]
 
-ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS + VITS_MULTIMODAL_CONFIGS
+ALL_POSSIBLE_MODELS = CNN_CONFIGS + VIT_CLASSIFICATION_CONFIGS + VITS_MULTIMODAL_CONFIGS + [GEMM]
 
 # This max size will determine the max number of images in all datasets
 DATASET_MAX_SIZE = 50000
@@ -125,7 +137,7 @@ CIFAR10 = "cifar10"
 CIFAR100 = "cifar100"
 CUSTOM_DATASET = "custom"
 
-DATASETS = [IMAGENET, COCO, CIFAR100, CIFAR10, CUSTOM_DATASET]
+DATASETS = [IMAGENET, COCO, CIFAR100, CIFAR10, CUSTOM_DATASET, GEMM]
 
 CIFAR_DATASET_DIR = "/home/carol/cifar"
 IMAGENET_DATASET_DIR = "/home/ILSVRC2012"
@@ -142,14 +154,6 @@ TMP_CRASH_FILE = "/tmp/vitsreliability_crash_file.txt"
 # Seed used for sampling
 TORCH_SEED = 0
 
-# code types that can be evaluated
-GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS = "grounding_dino", "maximals", "selective_ecc", "vits"
-MICROBENCHMARK = "microbenchmark"
-
-ALL_SETUP_TYPES = [
-    GROUNDING_DINO, MAXIMALS, SELECTIVE_ECC, VITS, MICROBENCHMARK
-]
-
 FP32, FP16, BFLOAT16, INT8 = "fp32", "fp16", "bfloat16", "int8"
 
 ALLOWED_MODEL_PRECISIONS = [
@@ -162,3 +166,22 @@ SWIN_BLOCK = 'SwinTransformerBlock'
 MICROBENCHMARK_MODULES = [ATTENTION, BLOCK, MLP, WINDOW_ATTENTION, SWIN_BLOCK]
 
 INT8_CKPT_DIR = "/home/int8_ckpts/"
+
+# GEMM setup
+RANDOM_INT_LIMIT = 65535
+
+# range for random generation
+GENERATOR_MAX_ABS_VALUE_GEMM = 10
+GENERATOR_MIN_ABS_VALUE_GEMM = -GENERATOR_MAX_ABS_VALUE_GEMM
+
+# EM Jetson Nano related
+TEMP_FILES = {
+    "CPU": "/sys/devices/virtual/thermal/thermal_zone0/temp",
+    "GPU": "/sys/devices/virtual/thermal/thermal_zone1/temp",
+    "SOC0": "/sys/devices/virtual/thermal/thermal_zone5/temp",
+    "SOC1": "/sys/devices/virtual/thermal/thermal_zone6/temp",
+    "SOC2": "/sys/devices/virtual/thermal/thermal_zone7/temp",
+    "TJ": "/sys/devices/virtual/thermal/thermal_zone8/temp",
+}
+
+TEMP_RECORDS_PATH = "data/temperatures/"
