@@ -9,8 +9,7 @@ import torch
 import configs
 import console_logger
 
-import datetime
-
+# import datetime
 # import Jetson.GPIO as GPIO
 
 sys.path.extend([
@@ -113,10 +112,9 @@ def run_setup(
     dnn_log_helper.start_setup_log_file(**log_args)
 
     nvml_wrapper = NVMLWrapper(enable_query=args.lognvml)
-    # if args.lognvml:
-    #     nvml_wrapper = NVMLWrapperThread(daemon=True)
-    #     nvml_wrapper.daemon = True
-    #     nvml_wrapper.start()
+    start_event = torch.cuda.Event(enable_timing=True, blocking=False, interprocess=False)
+    end_event = torch.cuda.Event(enable_timing=True, blocking=False, interprocess=False)
+
 
     # Check if a device is ok and disable grad
     common.check_and_setup_gpu()
@@ -141,14 +139,18 @@ def run_setup(
             pre_query = nvml_wrapper.query()
             timer.tic()
             dnn_log_helper.start_iteration()
+            start_event.record()
             dnn_output = setup_object(batch_id=batch_id)
+            end_event.record()
             torch.cuda.synchronize(device=configs.GPU_DEVICE)
             dnn_log_helper.end_iteration()
             timer.toc()
             kernel_time = timer.diff_time
             # Save the query data
             post_query = nvml_wrapper.query()
-            dnn_log_helper.log_info_detail(f"pre={pre_query}|post={post_query}")
+            end_event.synchronize(), start_event.synchronize()
+            elapsed_time = start_event.elapsed_time(end_event)
+            dnn_log_helper.log_info_detail(f"pre={pre_query}|post={post_query}|elapsed={elapsed_time:.4f}")
 
             # Always copy to CPU
             timer.tic()

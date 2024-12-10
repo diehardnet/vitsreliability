@@ -82,6 +82,7 @@ class NVMLWrapper:
             data_list = self.__query_nvml()
             if data_list:
                 return ";".join(map(str, data_list))
+        return ""
 
     def __query_nvml(self) -> list:
         data_list = list()
@@ -169,5 +170,5 @@ def __debug():
     dnn_lh.end_log_file()
 
 
-if __name__ == '__main__':
-    __debug()
+# if __name__ == '__main__':
+#     __debug()
