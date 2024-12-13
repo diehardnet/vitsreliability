@@ -10,9 +10,9 @@ import os
 class Timer:
     time_measure = 0
 
-    def tic(self): self.time_measure = time.time()
+    def tic(self): self.time_measure = time.perf_counter()
 
-    def toc(self): self.time_measure = time.time() - self.time_measure
+    def toc(self): self.time_measure = time.perf_counter() - self.time_measure
 
     @property
     def diff_time(self): return self.time_measure

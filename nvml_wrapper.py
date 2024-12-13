@@ -1,12 +1,6 @@
-import threading
 import time
-
 import pynvml
-
 import dnn_log_helper as dnn_lh
-
-
-# __DEBUG = False
 
 
 def handle_error(query: str, err: pynvml.NVMLError) -> str:
@@ -15,37 +9,37 @@ def handle_error(query: str, err: pynvml.NVMLError) -> str:
         err_str += "NA"
     else:
         err_str += err.__str__()
-    # if __DEBUG:
-    #     print(err_str)
     return err_str
 
 
-class NVMLWrapperThread(threading.Thread):
-    device_index = 0
-    query_interval_seconds = 1
+# class NVMLWrapperThread(threading.Thread):
+class NVMLWrapper:
+    __device_index = 0
+    __enable_query = False
 
-    def __init__(self, *args, **kwargs):
-        super(NVMLWrapperThread, self).__init__(*args, **kwargs)
-        self.keep_going = True
-        try:
-            pynvml.nvmlInit()
-            self.handle = pynvml.nvmlDeviceGetHandleByIndex(self.device_index)
-        except pynvml.NVMLError as err:
-            dnn_lh.log_info_detail(handle_error(query="get_handler", err=err))
-            return
+    def __init__(self, enable_query: bool = False):
+        # super(NVMLWrapperThread, self).__init__(*args, **kwargs)
+        self.__enable_query = enable_query
+        if self.__enable_query:
+            try:
+                pynvml.nvmlInit()
+                self.handle = pynvml.nvmlDeviceGetHandleByIndex(self.__device_index)
+            except pynvml.NVMLError as err:
+                dnn_lh.log_info_detail(handle_error(query="get_handler", err=err))
+                return
 
-        try:
-            # Check if ECC is enabled
-            curr_state, pending_state = pynvml.nvmlDeviceGetEccMode(self.handle)
-            self.ecc_available = (curr_state == pynvml.NVML_FEATURE_ENABLED and
-                                  pending_state == pynvml.NVML_FEATURE_ENABLED)
-            # At the beginning we assume all locations can be traced
-        except pynvml.NVMLError:
-            self.ecc_available = False
+            try:
+                # Check if ECC is enabled
+                curr_state, pending_state = pynvml.nvmlDeviceGetEccMode(self.handle)
+                self.ecc_available = (curr_state == pynvml.NVML_FEATURE_ENABLED and
+                                      pending_state == pynvml.NVML_FEATURE_ENABLED)
+                # At the beginning we assume all locations can be traced
+            except pynvml.NVMLError:
+                self.ecc_available = False
 
-        self._set_ecc_locations()
+            self.__set_ecc_locations()
 
-    def _set_ecc_locations(self):
+    def __set_ecc_locations(self):
         """
         Test only the ECC locations that can be traced
         """
@@ -83,14 +77,14 @@ class NVMLWrapperThread(threading.Thread):
 
         dnn_lh.log_info_detail(f"ImpossibleECCs:{not_possible_ecc_locations}")
 
-    def run(self):
-        while self.keep_going:
-            data_list = self.query_nvml()
+    def query(self) -> str:
+        if self.__enable_query:
+            data_list = self.__query_nvml()
             if data_list:
-                dnn_lh.log_info_detail(";".join(map(str, data_list)))
-            time.sleep(self.query_interval_seconds)
+                return ";".join(map(str, data_list))
+        return ""
 
-    def query_nvml(self):
+    def __query_nvml(self) -> list:
         data_list = list()
         # -----------------------------------------------------------------------
         # Device and application clocks
@@ -160,19 +154,21 @@ class NVMLWrapperThread(threading.Thread):
 
         return data_list
 
-    def join(self, timeout=None):
-        pynvml.nvmlShutdown()
-        self.keep_going = False
-        super(NVMLWrapperThread, self).join(timeout=timeout)
 
-# def __debug():
-#     global __DEBUG
-#     __DEBUG = True
-#     th = NVMLWrapperThread()
-#     th.start()
-#     time.sleep(20)
-#     th.join()
-#
-#
+def __debug():
+    query_gpu = NVMLWrapper(enable_query=True)
+    dnn_lh.start_setup_log_file(activate_logging=True, model="DEBUG_NVML", setup_type="TEST", loghelperinterval=1)
+    for i in range(10):
+        print(f"Testing iteration {i}")
+        pre = query_gpu.query()
+        dnn_lh.start_iteration()
+        time.sleep(1)
+        dnn_lh.end_iteration()
+        post = query_gpu.query()
+        dnn_lh.log_info_detail(f"pre={pre}|post={post}")
+
+    dnn_lh.end_log_file()
+
+
 # if __name__ == '__main__':
 #     __debug()
