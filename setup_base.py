@@ -31,6 +31,7 @@ class SetupBase:
         self.iterations = args.iterations
         self.save_logits = args.savelogits
         self.imgs_file_path = args.imgspath
+        self.subset_path = args.subset_path
 
         # default attributes
         self.correctness_threshold = 0.7  # Based on the whole dataset accuracy. Used only for golden generate part
@@ -225,16 +226,26 @@ class SetupBaseImageNet(SetupBaseClassification):
         if self.output_logger:
             self.output_logger.debug("Loading Imagenet dataset, it can take some time!")
 
-        # Set a sampler on the CPU
-        sampler_generator = torch.Generator(device=configs.CPU)
-        sampler_generator.manual_seed(configs.TORCH_SEED)
-
         test_set = tv_datasets.imagenet.ImageNet(root=configs.IMAGENET_DATASET_DIR, transform=self.transforms,
-                                                 split='val')
-        subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
-                                                generator=sampler_generator)
-        test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
-                                                  shuffle=False, pin_memory=True)
+                                                    split='val')
+
+        if self.subset_path is not None:
+            # Load the subset
+            with open(self.subset_path, "r") as subset_file:
+                self.selected_samples = [int(line) for line in subset_file.readlines()]
+
+            subset = torch.utils.data.Subset(test_set, self.selected_samples)
+            test_loader = torch.utils.data.DataLoader(dataset=subset, batch_size=self.batch_size,
+                                                      shuffle=False, pin_memory=True)
+        else:
+            # Set a sampler on the CPU
+            sampler_generator = torch.Generator(device=configs.CPU)
+            sampler_generator.manual_seed(configs.TORCH_SEED)
+
+            subset = torch.utils.data.RandomSampler(data_source=test_set, replacement=False, num_samples=self.test_sample,
+                                                    generator=sampler_generator)
+            test_loader = torch.utils.data.DataLoader(dataset=test_set, sampler=subset, batch_size=self.batch_size,
+                                                    shuffle=False, pin_memory=True)
 
         # TODO: it is necessary to save which images are being loaded
         self.selected_samples = list()

@@ -54,11 +54,11 @@ def parse_args() -> argparse.Namespace:
                         required=True, default=configs.FP32)
 
     # needed for FasterTransformer swin
-    parser.add_argument("--cfg", help="Swin Transformer config file", type=str, required=False, default="")
-    parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=-1)
-    parser.add_argument("--resume", help="resume from checkpoint", type=str, required=False, default="")
-    parser.add_argument('--int8-mode', type=int, required=False, help='int8 mode', choices=[1, 2])
-    parser.add_argument('--data-path', type=str, help='path to dataset')
+    # parser.add_argument("--cfg", help="Swin Transformer config file", type=str, required=False, default="")
+    # parser.add_argument("--local_rank", help="Local rank (for swin)", type=int, required=False, default=-1)
+    # parser.add_argument("--resume", help="resume from checkpoint", type=str, required=False, default="")
+    # parser.add_argument('--int8-mode', type=int, required=False, help='int8 mode', choices=[1, 2])
+    # parser.add_argument('--data-path', type=str, help='path to dataset')
 
     parser.add_argument('--textprompt', help="For the multimodal models define the text prompt",
                         type=str, required=False, default='')
@@ -84,6 +84,8 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--amplitude', type=int, help='Amplitude for EM setup (V)', default=-60)
     parser.add_argument('--delay', type=int, help='Delay for EM setup (ns)', default=100)
+
+    parser.add_argument('--subset-path', help="Path to the subset file (load chosen elements).", type=str, required=False, default=None)
 
     args = parser.parse_args()
 

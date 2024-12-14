@@ -22,14 +22,14 @@ GROUNDING_DINO_SETUPS = {
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
         [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1,
-        "ignore", configs.COCO
+        "ignore", configs.COCO, []
     ),
     configs.GROUNDING_DINO_SWINB_COGCOOR: (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
         [configs.FP32], configs.GROUNDING_DINO, 1, GROUNDING_DINO_SAMPLES, {None, "hardenedid"}, "Attention", 1,
-        "ignore", configs.COCO
+        "ignore", configs.COCO, []
     ),
 }
 
@@ -39,14 +39,14 @@ GROUNDING_DINO_SETUPS_JPL = {
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swint_ogc.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
         [configs.FP32], configs.GROUNDING_DINO, 1, 0, {None, "hardenedid"}, "Attention", 1,
-        f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET
+        f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET, []
     ),
     "jpl_swinb_cogcoor":  (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
         [configs.FP32], configs.GROUNDING_DINO, 1, 0, {None, "hardenedid"}, "Attention", 1,
-        f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET
+        f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET, []
     ),
 }
 
@@ -59,10 +59,10 @@ VITS_SETUPS = {
     # TODO: other setups configs.SELECTIVE_ECC, configs.VITS
     # setup for ViTs, TODO: add int8 and hardened ID configs
     model_i: (
-        model_i, None, None, [configs.FP32, configs.FP16], configs.VITS, BATCH_SIZE_VITS,
+        model_i, None, None, [configs.FP32], configs.VITS, BATCH_SIZE_VITS,
         TEST_SAMPLES_VITS,
-        {None, "hardenedid"}, None, LOG_INTERVAL_VITS,
-        "ignore", configs.IMAGENET
+        {None}, None, LOG_INTERVAL_VITS,
+        "ignore", configs.IMAGENET, [f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_low.txt", f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_high.txt"]
     ) for model_i in [
         configs.VIT_BASE_PATCH16_224, configs.SWIN_BASE_PATCH4_WINDOW7_224,
         # configs.VIT_BASE_PATCH16_384, configs.SWIN_BASE_PATCH4_WINDOW12_384,
@@ -75,19 +75,19 @@ MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW7_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]},
 }
 
@@ -135,62 +135,61 @@ def configure():
 
     for dnn_key, dnn_cfg in SETUPS.items():
         (dnn, weights_file, config_file, precisions, setup_type,
-         batch_size, test_samples, hardened, micro_op, log_interval, imgs_path, dataset) = dnn_cfg
+         batch_size, test_samples, hardened, micro_op, log_interval, imgs_path, dataset, subset_paths) = dnn_cfg
         for hardening in hardened:
             for float_precision in precisions:
-                configuration_name = f"{dnn}_{float_precision}_{hardening}_"
-                configuration_name += f"{setup_type}_{test_samples}_{batch_size}"
-                if dnn != dnn_key:
-                    configuration_name = f"{dnn_key}_{configuration_name}"
-                json_file_name = f"{jsons_path}/{configuration_name}.json"
-                gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
-                # if float_precision == configs.INT8:
-                #     config_file = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer
-                #     -Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
+                for subset_path in subset_paths:
+                    configuration_name = f"{dnn}_{float_precision}_{hardening}_"
+                    configuration_name += f"{setup_type}_{test_samples}_{batch_size}"
+                    if dnn != dnn_key:
+                        configuration_name = f"{dnn_key}_{configuration_name}"
+                    json_file_name = f"{jsons_path}/{configuration_name}.json"
+                    gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
+                    # if float_precision == configs.INT8:
+                    #     config_file = os.path.join(CURRENT_DIR, "FasterTransformer/examples/pytorch/swin/Swin-Transformer
+                    #     -Quantization/SwinTransformer/configs/swin/", f"{dnn}.yaml")
 
-                parameters = [
-                    # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
-                    'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
-                    'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
-                    "PATH=/usr/local/cuda-12/bin:$PATH",
-                    "CUDA_HOME=/usr/local/cuda-12",
-                    f"{CURRENT_DIR}/{script_name}",
-                    f"--iterations {ITERATIONS}",
-                    f"--testsamples {test_samples}",
-                    f"--batchsize {batch_size}",
-                    f"--checkpointpath {weights_file}",
-                    f"--goldpath {gold_path}",
-                    f"--model {dnn}",
-                    f"--configpath {config_file}",
-                    f"--setup_type {setup_type}",
-                    f"--floatthreshold {FLOAT_THRESHOLD}",
-                    f"--loghelperinterval {log_interval}",
-                    f"--precision {float_precision}",
-                    f"--microop {micro_op}" if micro_op else '',
-                    f"--{hardening}" if hardening else '',
-                    f"--savelogits" if SAVE_LOGITS else '',
-                    f"--lognvml" if LOG_NVML else '',
-                    # f"--cfg {cfg_path}" if float_precision == configs.INT8 else '',
-                    # f"--int8-mode {1}" if float_precision == configs.INT8 else '',
-                    f"--resume {weights_file}" if float_precision == configs.INT8 else '',
-                    f"--imgspath {imgs_path}",
-                    f"--dataset {dataset}"
-                ]
-                execute_parameters = parameters + ["--disableconsolelog"]
-                command_list = [{
-                    "killcmd": f"pkill -9 -f {script_name}",
-                    "exec": " ".join(execute_parameters),
-                    "codename": dnn,
-                    "header": " ".join(execute_parameters)
-                }]
+                    parameters = [
+                        # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
+                        'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                        'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
+                        "PATH=/usr/local/cuda-12/bin:$PATH",
+                        "CUDA_HOME=/usr/local/cuda-12",
+                        f"{CURRENT_DIR}/{script_name}",
+                        f"--iterations {ITERATIONS}",
+                        f"--testsamples {test_samples}",
+                        f"--batchsize {batch_size}",
+                        f"--checkpointpath {weights_file}",
+                        f"--goldpath {gold_path}",
+                        f"--model {dnn}",
+                        f"--configpath {config_file}",
+                        f"--setup_type {setup_type}",
+                        f"--floatthreshold {FLOAT_THRESHOLD}",
+                        f"--loghelperinterval {log_interval}",
+                        f"--precision {float_precision}",
+                        f"--microop {micro_op}" if micro_op else '',
+                        f"--{hardening}" if hardening else '',
+                        f"--savelogits" if SAVE_LOGITS else '',
+                        f"--lognvml" if LOG_NVML else '',
+                        f"--imgspath {imgs_path}",
+                        f"--dataset {dataset}",
+                        f"--subset-path {subset_path}" if subset_path else '',
+                    ]
+                    execute_parameters = parameters + ["--disableconsolelog"]
+                    command_list = [{
+                        "killcmd": f"pkill -9 -f {script_name}",
+                        "exec": " ".join(execute_parameters),
+                        "codename": dnn,
+                        "header": " ".join(execute_parameters)
+                    }]
 
-                generate_cmd = " ".join(parameters + ["--generate"])
-                # dump json
-                with open(json_file_name, "w") as json_fp:
-                    json.dump(obj=command_list, fp=json_fp, indent=4)
+                    generate_cmd = " ".join(parameters + ["--generate"])
+                    # dump json
+                    with open(json_file_name, "w") as json_fp:
+                        json.dump(obj=command_list, fp=json_fp, indent=4)
 
-                print(f"Executing generate for {generate_cmd}")
-                execute_cmd(generate_cmd)
+                    print(f"Executing generate for {generate_cmd}")
+                    execute_cmd(generate_cmd)
 
     print("Json creation and golden generation finished")
     print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
@@ -210,10 +209,10 @@ def configure_gemm():
                     gold_path = f"{CURRENT_DIR}/data/{configuration_name}.pt"
 
                     parameters = [
-                        'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
-                        'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
-                        "PATH=/usr/local/cuda-12/bin:$PATH",
-                        "CUDA_HOME=/usr/local/cuda-12",
+                        'LD_LIBRARY_PATH="/usr/local/cuda/lib64:/home/carol/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                        'PYTHONPATH="/home/carol/libLogHelper/build:${PYTHONPATH}"',
+                        "PATH=/usr/local/cuda/bin:$PATH",
+                        "CUDA_HOME=/usr/local/cuda",
                         f"{CURRENT_DIR}/{script_name}",
                         f"--fi_type {fi}",
                         f"--iterations {ITERATIONS}",
