@@ -151,10 +151,10 @@ def configure():
 
                     parameters = [
                         # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
-                        'LD_LIBRARY_PATH="/usr/local/cuda-12/lib64:/home/lucas/git_repo/libLogHelper/build:${LD_LIBRARY_PATH}"',
-                        'PYTHONPATH="/home/lucas/git_repo/libLogHelper/build:${PYTHONPATH}"',
-                        "PATH=/usr/local/cuda-12/bin:$PATH",
-                        "CUDA_HOME=/usr/local/cuda-12",
+                        'LD_LIBRARY_PATH="/usr/local/cuda/lib64:/home/carol/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                        'PYTHONPATH="/home/carol/libLogHelper/build:${PYTHONPATH}"',
+                        "PATH=/usr/local/cuda/bin:$PATH",
+                        "CUDA_HOME=/usr/local/cuda",
                         f"{CURRENT_DIR}/{script_name}",
                         f"--iterations {ITERATIONS}",
                         f"--testsamples {test_samples}",
