@@ -97,7 +97,8 @@ def main() -> None:
         indices = ""
         total_inputs = 0
         for i, row in df.iterrows():
-            indices += f"{row["image_id_in_full_imagenet"]}\n"
+            image_id = row['image_id_in_full_imagenet']
+            indices += f"{image_id}\n"
             total_inputs += 1
             if total_inputs == num_elem:
                 break
