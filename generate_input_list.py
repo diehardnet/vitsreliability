@@ -66,14 +66,16 @@ def main() -> None:
         df = df.sort_values(by='top_diff', ascending=confidence, ignore_index=False)
         # print(df["top_diff"][:num_elem])
 
-        output_file = f"data/input_images_{model}_{dataset}_{precision}_{'low' if input_type == InputType.LOW_CONFIDENCE else 'high'}2.txt"
+        output_file = f"data/input_images_{model}_{dataset}_{precision}_{'low' if input_type == InputType.LOW_CONFIDENCE else 'high'}.txt"
 
         indices = ""
         count = 0
         total_inputs = 0
         for i, row in df.iterrows():
             count += 1
-            if row['ground_truth'] != row['pred']:
+            print(count, num_elem)
+            if row['ground_truth'] != row['pred'] or count < num_elem:
+                print("cont")
                 continue
 
             total_inputs += 1
@@ -96,8 +98,10 @@ def main() -> None:
         output_file = f"data/input_images_{model}_{dataset}_{precision}_faulty_swfi.txt"
         indices = ""
         total_inputs = 0
+        print("="*50)
         for i, row in df.iterrows():
             image_id = row['image_id_in_full_imagenet']
+            print(f"Image: {image_id}")
             indices += f"{image_id}\n"
             total_inputs += 1
             if total_inputs == num_elem:
