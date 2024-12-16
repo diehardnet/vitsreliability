@@ -62,9 +62,14 @@ VITS_SETUPS = {
         model_i, None, None, [configs.FP32], configs.VITS, BATCH_SIZE_VITS,
         TEST_SAMPLES_VITS,
         {None}, None, LOG_INTERVAL_VITS,
-        "ignore", configs.IMAGENET, [f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_low.txt", f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_high.txt"]
+        "ignore", configs.IMAGENET, [
+            # f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_low.txt", 
+            # f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_high.txt",
+            f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_faulty_swfi.txt",
+        ]
     ) for model_i in [
-        configs.VIT_BASE_PATCH16_224, configs.SWIN_BASE_PATCH4_WINDOW7_224,
+        configs.VIT_BASE_PATCH16_224, 
+        configs.SWIN_BASE_PATCH4_WINDOW7_224,
         # configs.VIT_BASE_PATCH16_384, configs.SWIN_BASE_PATCH4_WINDOW12_384,
         # configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
     ]
@@ -102,8 +107,8 @@ SETUPS.update(VITS_SETUPS)
 # SETUPS.update(GROUNDING_DINO_SETUPS_JPL)
 # SETUPS.update(MICRO_SETUPS)
 
-LOG_NVML = False  # FIXME: Logging NVML is not in a good shape
-FLOAT_THRESHOLD = 0
+LOG_NVML = True  # FIXME: Logging NVML is not in a good shape
+FLOAT_THRESHOLD = 1e-5
 SAVE_LOGITS = True
 CONFIG_FILE = "/etc/radiation-benchmarks.conf"
 ITERATIONS = int(1e12)
@@ -141,6 +146,15 @@ def configure():
                 for subset_path in subset_paths:
                     configuration_name = f"{dnn}_{float_precision}_{hardening}_"
                     configuration_name += f"{setup_type}_{test_samples}_{batch_size}"
+
+                    if subset_path:
+                        if "low" in subset_path:
+                            configuration_name += "_low_confidence"
+                        elif "high" in subset_path:
+                            configuration_name += "_high_confidence"
+                        elif "faulty" in subset_path:
+                            configuration_name += "_swfi_crit_inputs"
+
                     if dnn != dnn_key:
                         configuration_name = f"{dnn_key}_{configuration_name}"
                     json_file_name = f"{jsons_path}/{configuration_name}.json"
@@ -151,10 +165,10 @@ def configure():
 
                     parameters = [
                         # "CUBLAS_WORKSPACE_CONFIG=:4096:8 ",
-                        'LD_LIBRARY_PATH="/usr/local/cuda/lib64:/home/carol/libLogHelper/build:${LD_LIBRARY_PATH}"',
-                        'PYTHONPATH="/home/carol/libLogHelper/build:${PYTHONPATH}"',
-                        "PATH=/usr/local/cuda/bin:$PATH",
-                        "CUDA_HOME=/usr/local/cuda",
+                        # 'LD_LIBRARY_PATH="/usr/local/cuda/lib64:/home/carol/libLogHelper/build:${LD_LIBRARY_PATH}"',
+                        # 'PYTHONPATH="/home/carol/libLogHelper/build:${PYTHONPATH}"',
+                        # "PATH=/usr/local/cuda/bin:$PATH",
+                        # "CUDA_HOME=/usr/local/cuda",
                         f"{CURRENT_DIR}/{script_name}",
                         f"--iterations {ITERATIONS}",
                         f"--testsamples {test_samples}",
