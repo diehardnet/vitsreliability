@@ -29,6 +29,8 @@ def search_header(lines: List[str], log):
         # "savelogits": r"(\S+)",
         "lognvml": r"(\S+)",
         "dataset": r"(\S+)",
+        "subset_path": r"(\S+)",
+        "seed": r"(\d+)",
     }
 
     for line in lines:
@@ -40,8 +42,11 @@ def search_header(lines: List[str], log):
                 if m:
                     parsed_data[flag] = m.group(1)
                 else:
-                    print(flag, pattern)
-                    raise ValueError(line + " " + log)
+                    if flag == "seed":
+                        parsed_data[flag] = 0
+                    else:
+                        print(flag, pattern)
+                        raise ValueError(line + " " + log)
             if len(parsed_data.keys()) == len(get_flags.keys()):
                 return parsed_data
         if pattern:
@@ -52,7 +57,10 @@ def search_header(lines: List[str], log):
 
                 return parsed_data
 
-    raise ValueError(f"Not possible to parse {log}")
+    # raise ValueError(f"Not possible to parse {log}")
+    print("Not possible to parse", log)
+    return None
+
 
 
 def search_error_criticality(err_str: str) -> re.Match:
@@ -75,8 +83,13 @@ def parse_log_file(log_path: str) -> List[dict]:
         with open(log_path) as log_fp:
             lines = log_fp.readlines()
         if len(lines) <= 4:
+            print("Not enough lines", log_path)
             return []
+        
         data_dict = search_header(lines=lines, log=log_path)
+        if data_dict is None:
+            return []
+        
         data_dict["start_dt"] = start_dt
         data_dict["ecc"] = ecc
         data_dict["hostname"] = hostname
@@ -126,8 +139,13 @@ def main():
     args = parse_args()
     data_list = list()
     for subdir, dirs, files in os.walk(args.logdir):
-        if any([i in subdir for i in ["carola20001", "carola20002", "carolp20002", "carolp22003", "carola20003"]]):
+        if any([i in subdir for i in [
+            "carola20001", 
+            "carola20002", 
+            "carola20003",
+        ]]):
             print("Parsing", subdir)
+            print("Number of files", len(files))
             for file in files:
                 path = os.path.join(subdir, file)
                 new_line = parse_log_file(log_path=path)
@@ -136,7 +154,8 @@ def main():
 
     df = pd.DataFrame(data_list)
     df = df.fillna(0)
-    df.to_csv("../data/parsed_logs_rad_may_2024.csv", index=False)
+    print(len(df))
+    df.to_csv("../data/parsed_logs_rad_december_2024.csv", index=False)
 
 
 if __name__ == '__main__':
