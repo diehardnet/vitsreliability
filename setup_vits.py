@@ -48,6 +48,10 @@ import common
 from setup_base import SetupBaseImageNet
 import hardened_identity
 
+from tcp_client import send_tensor_to_server
+
+SAVE_TENSORS_TO_SERVER = False
+
 
 class SetupVits(SetupBaseImageNet):
     def __init__(self, args: argparse.Namespace, output_logger: logging.Logger):
@@ -226,6 +230,18 @@ class SetupVits(SetupBaseImageNet):
         torch.cuda.empty_cache()
         self.load_data_at_test()
 
+    def _save_logits(self, output, batch_id):
+        if SAVE_TENSORS_TO_SERVER:
+            log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+            save_file = f"{os.path.basename(log_helper_file)}_btid_{batch_id}_it_{self.current_iteration}.pt"
+
+            if self.output_logger:
+                self.output_logger.debug(f"Saving logits at:{save_file} in the server")
+
+            result_connection = send_tensor_to_server(tensor=output, filename=save_file)
+
+            dnn_log_helper.log_info_detail(info_detail=f"LOGITS_AT:{save_file} outcome: {result_connection}")
+
     def compare_inference(self, output, batch_id) -> int:
         # uncomment to test the error detection
         # if self.current_iteration == 4:
@@ -290,6 +306,9 @@ class SetupVits(SetupBaseImageNet):
                 if self.output_logger:
                     self.output_logger.error(error_detail_out)
                 dnn_log_helper.log_error_detail(error_detail_out)
+
+        # Send logits
+        self._save_logits(output=output, batch_id=batch_id)
         # ------------ log and return
         if output_errors != 0:
             dnn_log_helper.log_error_count(error_count=output_errors)
