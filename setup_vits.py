@@ -1,4 +1,6 @@
 import sys
+import time
+
 # sys.path.append('FasterTransformer/examples/pytorch/swin/SwinTransformerQuantization')
 # sys.path.append('FasterTransformer/examples/pytorch/vit/ViT-Quantization')
 sys.path.extend([
@@ -238,9 +240,12 @@ class SetupVits(SetupBaseImageNet):
             if self.output_logger:
                 self.output_logger.debug(f"Saving logits at:{save_file} in the server")
 
+            time_to_send = time.time()
             result_connection = send_tensor_to_server(tensor=output, filename=save_file)
-
-            dnn_log_helper.log_info_detail(info_detail=f"LOGITS_AT:{save_file} outcome: {result_connection}")
+            time_to_send = time.time() - time_to_send
+            dnn_log_helper.log_info_detail(
+                info_detail=f"LOGITS_AT:{save_file} {result_connection} time_to_send: {time_to_send}"
+            )
 
     def compare_inference(self, output, batch_id) -> int:
         # uncomment to test the error detection

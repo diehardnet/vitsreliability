@@ -16,9 +16,10 @@ SOCKET_ERROR_WHEN_SENDING_FILENAME = "SOCKET_ERROR_FILENAME"
 SOCKET_ERROR_WHEN_SENDING_DATA = "SOCKET_ERROR_DATA"
 SOCKET_ERROR_WHEN_SHUTTING_DOWN = "SOCKET_ERROR_SHUTTING_DOWN"
 
-__SERVER_PORT = 5001  # must match server
-__BUFFER_SIZE = 4096
-__SERVER_ADDRESS = "127.0.0.1"
+SERVER_PORT = 5001  # must match server
+BUFFER_SIZE = 4096
+SERVER_ADDRESS = "127.0.0.1"
+TENSOR_LENGTH_WIDTH = 4
 
 
 def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
@@ -40,13 +41,14 @@ def send_tensor_to_server(tensor: torch.Tensor, filename: str) -> str:
     try:
         # create TCP socket
         sock = socket.socket()
-        sock.connect((__SERVER_ADDRESS, __SERVER_PORT))
+        sock.settimeout(1)
+        sock.connect((SERVER_ADDRESS, SERVER_PORT))
 
         # send filename first
         sock.send(os.path.basename(filename).encode())
 
         # wait for ack
-        ack = sock.recv(__BUFFER_SIZE).decode()
+        ack = sock.recv(BUFFER_SIZE).decode()
         if ack != FILENAME_OK:
             # print("Server did not accept filename")
             sock.close()
@@ -55,8 +57,11 @@ def send_tensor_to_server(tensor: torch.Tensor, filename: str) -> str:
         return SOCKET_ERROR_WHEN_SENDING_FILENAME
 
     try:
-        #  send the tensor
         data_bytes = tensor_to_bytes(tensor)
+        # send the size
+        tensor_bytes = len(data_bytes)
+        sock.sendall(tensor_bytes.to_bytes(TENSOR_LENGTH_WIDTH, 'big'))  # 4 bytes
+        #  send the tensor
         sock.sendall(data_bytes)
     except socket.error:
         return SOCKET_ERROR_WHEN_SENDING_DATA
@@ -72,10 +77,7 @@ def send_tensor_to_server(tensor: torch.Tensor, filename: str) -> str:
 
 
 def debug():
-    dummy = torch.randn(2, 5)
-    bytes_test = tensor_to_bytes(dummy)
-    bytes_count = len(bytes_test)
-    assert bytes_count == 1577, "Not always equal, {bytes_count} != 1577".format(bytes_count=bytes_count)
+    dummy = torch.randn(5, 10)
     for i in range(1, 1000):
         print(dummy)
         returned = send_tensor_to_server(dummy, "dummy_tensor.pt")
