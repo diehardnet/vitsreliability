@@ -1,16 +1,24 @@
+import argparse
+import logging
+import os
+import re
+import time
+
 import torch
+
+import common
 import configs
 import dnn_log_helper
 import setup_base
-import common
-import logging
-import argparse
+from tcp_client import send_tensor_to_server
+
+SAVE_TENSORS_TO_SERVER = True
+
 
 class SetupGEMM(setup_base.SetupBase):
     def __init__(self, args: argparse.Namespace, output_logger: logging.Logger):
         super().__init__(args=args, output_logger=output_logger)
         self.size = args.matrix_size
-
 
     def __call__(self, batch_id, **kwargs):
         input_a, input_b = self.input_list[batch_id]
@@ -24,32 +32,31 @@ class SetupGEMM(setup_base.SetupBase):
             input_b = torch.FloatTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
             self.input_list.append((input_a, input_b))
 
-
     def check_dnn_accuracy(self) -> None:
         # No sense here as its not a model
         pass
 
-    def __compare_output(self, output_tensor: torch.tensor, golden_tensor: torch.tensor, output_logger: logging.Logger) -> int:
-        output_errors = 0
-
-        # Get non-equal elements' indices
-        # Identify non-equal elements
-        diff_mask = torch.ne(output_tensor, golden_tensor)
-        # Get indices where elements differ
-        diff_indices = torch.nonzero(diff_mask)
-        for index in diff_indices:
-            i, j = index
-            gold_value = golden_tensor[i, j]
-            read_value = output_tensor[i, j]
-
-            if gold_value != read_value:
-                error_detail = f"p:[{i}, {j}] r:{read_value}, e:{gold_value}"
-                if output_logger and output_errors < 10:
-                    output_logger.debug(error_detail)
-
-                dnn_log_helper.log_error_detail(error_detail)
-                output_errors += 1
-
+    def __compare_output(self, output_tensor: torch.Tensor, golden_tensor: torch.Tensor,
+                         output_logger: logging.Logger) -> int:
+        # output_errors = 0
+        # # Get non-equal elements' indices
+        # # Identify non-equal elements
+        # diff_mask = torch.ne(output_tensor, golden_tensor)
+        # # Get indices where elements differ
+        # diff_indices = torch.nonzero(diff_mask)
+        # for index in diff_indices:
+        #     i, j = index
+        #     gold_value = golden_tensor[i, j]
+        #     read_value = output_tensor[i, j]
+        #
+        #     if gold_value != read_value:
+        #         error_detail = f"p:[{i}, {j}] r:{read_value}, e:{gold_value}"
+        #         if output_logger and output_errors < 10:
+        #             output_logger.debug(error_detail)
+        #
+        #         dnn_log_helper.log_error_detail(error_detail)
+        #         output_errors += 1
+        # First check if the tensors are equal or not
         # ------------ Check error on the whole output -------------------------------------------------------------
         # Not necessary to save everything, only the good info
         # Data on output tensor
@@ -59,12 +66,30 @@ class SetupGEMM(setup_base.SetupBase):
         abs_diff = torch.abs(torch.subtract(output_tensor, golden_tensor))
         has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
         error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
-        output_errors += 1
+        # output_errors += 1
+
+        self._save_logits(output=output_tensor)
+
         if output_logger:
             output_logger.error(error_detail_out)
         dnn_log_helper.log_error_detail(error_detail_out)
 
-        return output_errors
+        return 1
+
+    def _save_logits(self, output):
+        if SAVE_TENSORS_TO_SERVER:
+            log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+            save_file = f"{os.path.basename(log_helper_file)}_it_{self.current_iteration}.pt"
+
+            if self.output_logger:
+                self.output_logger.debug(f"Saving GEMM at:{save_file} in the server")
+
+            time_to_send = time.time()
+            result_connection = send_tensor_to_server(tensor=output, filename=save_file)
+            time_to_send = time.time() - time_to_send
+            dnn_log_helper.log_info_detail(
+                info_detail=f"{save_file} {result_connection} time_to_send: {time_to_send}"
+            )
 
     def compare_inference(self, output, batch_id) -> int:
         # if self.current_iteration % 8 == 0:
@@ -80,7 +105,7 @@ class SetupGEMM(setup_base.SetupBase):
                 fatal_string=f"Tensors are not on CPU. OUT IS CUDA:{out_is_cuda} GOLDEN IS CUDA:{golden_is_cuda}")
 
         # First check if the tensors are equal or not
-        if common.equal(lhs=output, rhs=golden_tensor, threshold=self.float_threshold) is True:
+        if common.equal(lhs=output, rhs=golden_tensor, threshold=self.float_threshold):
             return 0
 
         # ------------ Check the size of the tensors
@@ -110,7 +135,7 @@ class SetupGEMM(setup_base.SetupBase):
 
     def save_setup_data_to_gold_file(self) -> None:
         torch.save(
-            obj=[self.golden, self.input_list,],
+            obj=[self.golden, self.input_list, ],
             f=self.gold_path
         )
 

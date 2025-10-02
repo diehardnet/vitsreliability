@@ -41,7 +41,7 @@ GROUNDING_DINO_SETUPS_JPL = {
         [configs.FP32], configs.GROUNDING_DINO, 1, 0, {None, "hardenedid"}, "Attention", 1,
         f"{CURRENT_DIR}/data/jpl_samples/jpl_images.txt", configs.CUSTOM_DATASET, []
     ),
-    "jpl_swinb_cogcoor":  (
+    "jpl_swinb_cogcoor": (
         configs.GROUNDING_DINO_SWINB_COGCOOR,
         f"{CURRENT_DIR}/data/weights_grounding_dino/groundingdino_swinb_cogcoor.pth",
         f"{CURRENT_DIR}/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py",
@@ -68,7 +68,7 @@ VITS_SETUPS = {
             f"{CURRENT_DIR}/data/input_images_{model_i}_imagenet_fp32_faulty_swfi.txt",
         ]
     ) for model_i in [
-        configs.VIT_BASE_PATCH16_224, 
+        configs.VIT_BASE_PATCH16_224,
         configs.SWIN_BASE_PATCH4_WINDOW7_224,
         # configs.VIT_BASE_PATCH16_384, configs.SWIN_BASE_PATCH4_WINDOW12_384,
         # configs.DEIT_BASE_PATCH16_224, configs.DEIT_BASE_PATCH16_384
@@ -80,24 +80,28 @@ MICRO_LOG_INTERVAL = 100
 MICRO_SETUPS = {
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW12_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET,
+        []
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"swin_{micro_op}": (
         configs.SWIN_BASE_PATCH4_WINDOW7_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET,
+        []
     ) for micro_op in [configs.SWIN_BLOCK, configs.MLP, configs.WINDOW_ATTENTION]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_384, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET,
+        []
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]},
     **{f"vit_{micro_op}": (
         configs.VIT_BASE_PATCH16_224, "ignore", "ignore", [configs.FP32, configs.FP16], configs.MICROBENCHMARK,
-        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET, []
+        MICRO_BATCHED_SAMPLES, MICRO_BATCHED_SAMPLES, {None}, micro_op, MICRO_LOG_INTERVAL, "ignore", configs.IMAGENET,
+        []
     ) for micro_op in [configs.ATTENTION, configs.BLOCK, configs.MLP]},
 }
 
 GEMM_SETUPS = {
-    "gemm": ([1024, 2048, 4096, 8192], [configs.FP32], configs.GEMM, 5, [configs.EM])
+    "gemm": ([1024, 2048, 4096, 8192], [configs.FP32], configs.GEMM, 1, [configs.NEUTRONS])
 }
 
 # Change for configuring
@@ -209,6 +213,7 @@ def configure():
     print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
 
+
 def configure_gemm():
     home, jsons_path, server_ip = general_configure()
     script_name = "main.py"
@@ -258,6 +263,7 @@ def configure_gemm():
     print("Json creation and golden generation finished")
     print("Set 'CUBLAS_WORKSPACE_CONFIG=:4096:8' in the .bashrc file")
     print(f"You may run: scp -r {jsons_path} carol@{server_ip}:{home}/radiation-setup/machines_cfgs/")
+
 
 def test_all_jsons(enable_console_logging, timeout=30):
     hostname = gethostname()
