@@ -298,9 +298,10 @@ def main():
     if args.testjsons != 0:
         test_all_jsons(enable_console_logging=args.enableconsole, timeout=args.testjsons)
     else:
-        configure()
         if args.gemm:
             configure_gemm()
+        else:
+            configure()
 
 
 if __name__ == "__main__":
