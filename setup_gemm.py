@@ -28,8 +28,14 @@ class SetupGEMM(setup_base.SetupBase):
         torch.manual_seed(configs.TORCH_SEED)
         r1, r2 = configs.GENERATOR_MIN_ABS_VALUE_GEMM, configs.GENERATOR_MAX_ABS_VALUE_GEMM
         for _ in range(self.batch_size):
-            input_a = torch.FloatTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
-            input_b = torch.FloatTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
+            if self.precision == configs.FP32:
+                input_a = torch.FloatTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
+                input_b = torch.FloatTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
+            elif self.precision == configs.FP16:
+                input_a = torch.HalfTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
+                input_b = torch.HalfTensor(self.size, self.size).uniform_(r1, r2).to(configs.GPU_DEVICE)
+            else:
+                raise NotImplementedError(f"Precision {self.precision} is not supported")
             self.input_list.append((input_a, input_b))
 
     def check_dnn_accuracy(self) -> None:

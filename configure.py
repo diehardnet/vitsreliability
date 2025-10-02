@@ -101,7 +101,7 @@ MICRO_SETUPS = {
 }
 
 GEMM_SETUPS = {
-    "gemm": ([1024, 2048, 4096, 8192], [configs.FP32], configs.GEMM, 1, [configs.NEUTRONS])
+    "gemm": ([1024, 2048, 4096, 8192], [configs.FP16, configs.FP32], configs.GEMM, 1, [configs.NEUTRONS])
 }
 
 # Change for configuring
