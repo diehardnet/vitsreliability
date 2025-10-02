@@ -10,9 +10,8 @@ import common
 import configs
 import dnn_log_helper
 import setup_base
-from tcp_client import send_tensor_to_server
 
-SAVE_TENSORS_TO_SERVER = True
+# SAVE_TENSORS_TO_SERVER = True
 
 
 class SetupGEMM(setup_base.SetupBase):
@@ -42,27 +41,27 @@ class SetupGEMM(setup_base.SetupBase):
         # No sense here as its not a model
         pass
 
-    def __compare_output(self, output_tensor: torch.Tensor, golden_tensor: torch.Tensor,
-                         output_logger: logging.Logger) -> int:
-        # output_errors = 0
-        # # Get non-equal elements' indices
-        # # Identify non-equal elements
-        # diff_mask = torch.ne(output_tensor, golden_tensor)
-        # # Get indices where elements differ
-        # diff_indices = torch.nonzero(diff_mask)
-        # for index in diff_indices:
-        #     i, j = index
-        #     gold_value = golden_tensor[i, j]
-        #     read_value = output_tensor[i, j]
-        #
-        #     if gold_value != read_value:
-        #         error_detail = f"p:[{i}, {j}] r:{read_value}, e:{gold_value}"
-        #         if output_logger and output_errors < 10:
-        #             output_logger.debug(error_detail)
-        #
-        #         dnn_log_helper.log_error_detail(error_detail)
-        #         output_errors += 1
-        # First check if the tensors are equal or not
+    def __compare_output(self, output_tensor: torch.tensor, golden_tensor: torch.tensor, output_logger: logging.Logger) -> int:
+        output_errors = 0
+
+        # Get non-equal elements' indices
+        # Identify non-equal elements
+        diff_mask = torch.ne(output_tensor, golden_tensor)
+        # Get indices where elements differ
+        diff_indices = torch.nonzero(diff_mask)
+        for index in diff_indices:
+            i, j = index
+            gold_value = golden_tensor[i, j]
+            read_value = output_tensor[i, j]
+
+            if gold_value != read_value:
+                error_detail = f"p:[{i}, {j}] r:{read_value}, e:{gold_value}"
+                if output_logger and output_errors < 10:
+                    output_logger.debug(error_detail)
+
+                dnn_log_helper.log_error_detail(error_detail)
+                output_errors += 1
+
         # ------------ Check error on the whole output -------------------------------------------------------------
         # Not necessary to save everything, only the good info
         # Data on output tensor
@@ -72,30 +71,27 @@ class SetupGEMM(setup_base.SetupBase):
         abs_diff = torch.abs(torch.subtract(output_tensor, golden_tensor))
         has_nan_diff, has_inf_diff, min_val_diff, max_val_diff = common.describe_error(input_tensor=abs_diff)
         error_detail_out += f"diff_t nan:{has_nan_diff} inf:{has_inf_diff} min:{min_val_diff} max:{max_val_diff}"
-        # output_errors += 1
-
-        self._save_logits(output=output_tensor)
-
+        output_errors += 1
         if output_logger:
             output_logger.error(error_detail_out)
         dnn_log_helper.log_error_detail(error_detail_out)
 
-        return 1
+        return output_errors
 
-    def _save_logits(self, output):
-        if SAVE_TENSORS_TO_SERVER:
-            log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
-            save_file = f"{os.path.basename(log_helper_file)}_it_{self.current_iteration}.pt"
-
-            if self.output_logger:
-                self.output_logger.debug(f"Saving GEMM at:{save_file} in the server")
-
-            time_to_send = time.time()
-            result_connection = send_tensor_to_server(tensor=output, filename=save_file)
-            time_to_send = time.time() - time_to_send
-            dnn_log_helper.log_info_detail(
-                info_detail=f"{save_file} {result_connection} time_to_send: {time_to_send}"
-            )
+    # def _save_logits(self, output):
+    #     if SAVE_TENSORS_TO_SERVER:
+    #         log_helper_file = re.match(r".*LOCAL:(\S+).log.*", dnn_log_helper.log_file_name).group(1)
+    #         save_file = f"{os.path.basename(log_helper_file)}_it_{self.current_iteration}.pt"
+    #
+    #         if self.output_logger:
+    #             self.output_logger.debug(f"Saving GEMM at:{save_file} in the server")
+    #
+    #         time_to_send = time.time()
+    #         result_connection = send_tensor_to_server(tensor=output, filename=save_file)
+    #         time_to_send = time.time() - time_to_send
+    #         dnn_log_helper.log_info_detail(
+    #             info_detail=f"{save_file} {result_connection} time_to_send: {time_to_send}"
+    #         )
 
     def compare_inference(self, output, batch_id) -> int:
         # if self.current_iteration % 8 == 0:
